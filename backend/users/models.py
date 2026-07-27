@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.utils import timezone
 
 from . import constants
 
@@ -7,17 +8,43 @@ from . import constants
 class User(AbstractUser):
     """Кастомная модель пользователя."""
 
-    first_name = models.CharField(
-        max_length=constants.FIRST_NAME_LEN,
-        blank=True,
+    class Difficulty(models.TextChoices):
+        """Уровни сложности."""
+
+        EASY = ('easy', 'Легкий')
+        MEDIUM = ('middle', 'Средний')
+        HARD = ('hard', 'сложный')
+
+    class Role(models.TextChoices):
+        """Роли пользователя."""
+
+        USER = ('user', 'Пользователь')
+        ADMIN = ('admin', 'Администратор')
+
+    name = models.CharField(
+        max_length=constants.NAME_LEN,
         verbose_name='Имя',
         help_text='Имя пользователя',
     )
-    last_name = models.CharField(
-        max_length=constants.LAST_NAME_LEN,
+    birth_date = models.DateField(
+        null=True,
         blank=True,
-        verbose_name='Фамилия',
-        help_text='Фамилия пользователя',
+        verbose_name='Дата рождения',
+        help_text='Дата рождения',
+    )
+    current_difficulty = models.CharField(
+        max_length=constants.CURRENT_DIFFICULTY_LEN,
+        choices=Difficulty.choices,
+        default=Difficulty.EASY,
+        verbose_name='Уровень сложности',
+        help_text='Текущий уровень сложности',
+    )
+    role = models.CharField(
+        max_length=constants.ROLE_LEN,
+        choices=Role.choices,
+        default=Role.USER,
+        verbose_name='Роль',
+        help_text='Роль пользователя',
     )
     email = models.EmailField(
         max_length=constants.EMAIL_LEN,
@@ -25,11 +52,21 @@ class User(AbstractUser):
         verbose_name='Электронная почта',
         help_text='Электронная почта пользователя',
     )
-    username = models.CharField(
-        max_length=constants.USERNAME_LEN,
-        unique=True,
-        verbose_name='Ник',
-        help_text='Виртуальное имя пользователя',
+    password = models.CharField(
+        max_length=constants.PASSWORD_LEN,
+        verbose_name='Пароль',
+        help_text='Пароль для доступа в аккаунт',
+    )
+    last_login = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name='Последний вход',
+        help_text='Последний вход в аккаунт',
+    )
+    created_at = models.DateTimeField(
+        default=timezone.now,
+        verbose_name='Дата регистрации',
+        help_text='Дата регистрации пользователя',
     )
 
     class Meta:
@@ -38,4 +75,4 @@ class User(AbstractUser):
 
     def __str__(self):
         """Возвращает строковое представление."""
-        return self.username
+        return self.name
