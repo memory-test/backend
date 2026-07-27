@@ -41,7 +41,7 @@ class Exercise(models.Model):
     )
     difficulty = models.CharField(
         'Уровень сложности',
-        max_length=Difficulty.max_length,
+        max_length=Difficulty.get_max_length(),
         choices=Difficulty.choices,
         default=Difficulty.EASY,
     )

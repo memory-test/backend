@@ -8,7 +8,6 @@ class Difficulty(models.TextChoices):
     MEDIUM = 'medium', 'Средний'
     HARD = 'hard', 'Сложный'
 
-    max_length: int
-
-
-Difficulty.max_length = max(len(value) for value, _ in Difficulty.choices)
+    @classmethod
+    def get_max_length(cls) -> int:
+        return max(len(value) for value, _ in cls.choices)
