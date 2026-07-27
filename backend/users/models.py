@@ -2,18 +2,12 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
-from . import constants
+from backend.common.choices import Difficulty
+from backend.users import constants
 
 
 class User(AbstractUser):
     """Кастомная модель пользователя."""
-
-    class Difficulty(models.TextChoices):
-        """Уровни сложности."""
-
-        EASY = ('easy', 'Легкий')
-        MEDIUM = ('middle', 'Средний')
-        HARD = ('hard', 'сложный')
 
     class Role(models.TextChoices):
         """Роли пользователя."""
