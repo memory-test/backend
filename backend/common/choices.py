@@ -7,3 +7,8 @@ class Difficulty(models.TextChoices):
     EASY = 'easy', 'Лёгкий'
     MEDIUM = 'medium', 'Средний'
     HARD = 'hard', 'Сложный'
+
+    max_length: int
+
+
+Difficulty.max_length = max(len(value) for value, _ in Difficulty.choices)
