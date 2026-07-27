@@ -2,8 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
-from backend.common.choices import Difficulty
-from backend.users import constants
+from common.choices import Difficulty
+from users import constants
 
 
 class User(AbstractUser):
