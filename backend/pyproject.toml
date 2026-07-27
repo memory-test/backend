@@ -12,4 +12,6 @@ select = ["E", "W", "F", "I"]
 [tool.ruff.format]
 quote-style = "single"
 [tool.isort]
-profile = "django"
+profile = "black"
+line_length = 79
+src_paths = ["."]
