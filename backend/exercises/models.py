@@ -2,21 +2,32 @@ from django.db import models
 
 from common.choices import Difficulty
 from exercises.constants import (
-    EX_DESC_LENGTH,
+    DESC_LENGTH,
     EX_TITLE_LENGTH,
     STR_LIMIT,
     TYPE_NAME_LENGTH,
-    TYPY_DESC_LENGTH,
 )
 
 
-class ExerciseType(models.Model):
+class ExerciseBase(models.Model):
+    """
+    Абстрактная модель для моделей приложения "Задания".
+
+    Содержит общее поле "Описание".
+    """
+
+    description = models.TextField('Описание', max_length=DESC_LENGTH)
+
+    class Meta:
+        abstract = True
+
+
+class ExerciseType(ExerciseBase):
     """Модель типов заданий."""
 
     name = models.CharField(
         'Наименование', max_length=TYPE_NAME_LENGTH, unique=True
     )
-    description = models.TextField('Описание', max_length=TYPY_DESC_LENGTH)
 
     class Meta:
         verbose_name = 'тип задания'
@@ -29,13 +40,12 @@ class ExerciseType(models.Model):
         return self.name[:STR_LIMIT]
 
 
-class Exercise(models.Model):
+class Exercise(ExerciseBase):
     """Модель заданий."""
 
     title = models.CharField(
         'Название', max_length=EX_TITLE_LENGTH, unique=True
     )
-    description = models.TextField('Описание', max_length=EX_DESC_LENGTH)
     type = models.ForeignKey(
         ExerciseType, on_delete=models.CASCADE, verbose_name='Тип задания'
     )
