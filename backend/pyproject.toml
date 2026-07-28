@@ -13,7 +13,7 @@ select = ["E", "W", "F", "I"]
 
 
 [tool.ruff.format]
-quote-style = "double"
+quote-style = "single"
 
 [tool.isort]
 profile = "django"
