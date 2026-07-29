@@ -1,3 +1,13 @@
+[project]
+name = "memory-test"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "django==5.1.1",
+    "python-dotenv==1.0.1",
+]
+
+
 [tool.ruff]
 line-length = 79
 exclude = [
@@ -17,3 +27,9 @@ quote-style = "single"
 
 [tool.isort]
 profile = "django"
+
+[dependency-groups]
+dev = [
+    "isort>=8.0.1",
+    "ruff>=0.16.0",
+]
