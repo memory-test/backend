@@ -1,6 +1,5 @@
-from django.db import models
 from django.conf import settings
-
+from django.db import models
 
 MAX_DIFFICULTY_LEN = 10
 
@@ -21,7 +20,7 @@ class ExerciseSession(models.Model):
         verbose_name='Пользователь'
     )
     exercise = models.ForeignKey(
-        'trainings.TemporaryExerciseStub',
+        'Exercise',
         on_delete=models.CASCADE,
         related_name='sessions',
         verbose_name='Задание'
@@ -56,8 +55,6 @@ class ExerciseSession(models.Model):
         verbose_name_plural = 'Сессии упражнений'
         ordering = ['id']
 
-    def __str__(self):
-        return f"Сессия {self.id} | Пользователь {self.user_id}"
 
 
 class UserAnswer(models.Model):
@@ -83,6 +80,7 @@ class UserAnswer(models.Model):
         verbose_name_plural = 'Ответы пользователей'
         ordering = ['id']
 
-    def __str__(self):
-        return f"Ответ {self.id} | Сессия {self.session_id} | Статус: {self.is_correct}"
+
+
+
 
