@@ -1,6 +1,8 @@
 from django.conf import settings
 from django.db import models
 
+from exercises.models import Exercise
+
 MAX_DIFFICULTY_LEN = 10
 
 
@@ -20,7 +22,7 @@ class ExerciseSession(models.Model):
         verbose_name='Пользователь',
     )
     exercise = models.ForeignKey(
-        'Exercise',
+        Exercise,
         on_delete=models.CASCADE,
         related_name='sessions',
         verbose_name='Задание',
