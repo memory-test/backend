@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'users.apps.UsersConfig',
     'exercises.apps.ExercisesConfig',
+    'progress.apps.ProgressConfig',
     'api.apps.ApiConfig',
 ]
 
