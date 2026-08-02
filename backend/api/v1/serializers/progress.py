@@ -1,10 +1,11 @@
 from rest_framework import serializers
 
 
-class ExerciseSerializer(serializers.Serializer):
-    """
-    Валидирует данные, которые присылвает фронтенд.
-    """
+# По названию класса это выглядит, как сериализатор модели Заданий,
+# хотя это не так. Скорее всего это для сессии упражения.
+class ExerciseSessionSerializer(serializers.Serializer):
+    """Валидирует данные, которые присылвает фронтенд."""
+
     started_at = serializers.DateTimeField(required=True)
     finished_at = serializers.DateTimeField(required=True)
     duration_seconds = serializers.IntegerField(required=True)
@@ -13,13 +14,12 @@ class ExerciseSerializer(serializers.Serializer):
     answer_data = serializers.JSONField(required=True)
 
     def validate(self, attrs):
-        """Проверяем согласованность даты начала и окончания задания"""
+        """Проверяем согласованность даты начала и окончания задания."""
         if attrs['started_at'] >= attrs['finished_at']:
             raise serializers.ValidationError(
                 {
                     'finished_at': (
-                        'Время окончания должно быть '
-                        'позже времени начала.'
+                        'Время окончания должно быть позже времени начала.'
                     )
                 }
             )

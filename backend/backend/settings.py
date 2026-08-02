@@ -12,7 +12,11 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'secrect')
 
 DEBUG = os.getenv('DEBUG', 'True') in ['True', '1']
 
-ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS', '127.0.0.1,localhost').split(
+    ','
+)
+
+CSRF_TRUSTED_ORIGINS = [f'https://{host}' for host in ALLOWED_HOSTS]
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -24,6 +28,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'django_filters',
     'users.apps.UsersConfig',
     'exercises.apps.ExercisesConfig',
     'progress.apps.ProgressConfig',
@@ -98,3 +104,12 @@ STATIC_URL = 'static/'
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticatedOrReadOnly',
+    ],
+    'DEFAULT_PAGINATION_CLASS': 'api.v1.pagination.PageNumberLimitPagination',
+    'PAGE_SIZE': 5,
+}

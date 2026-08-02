@@ -3,11 +3,11 @@ name = "memory-test"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "django==5.1.1",
+    "django>=6.0.7",
     "djangorestframework>=3.17.1",
+    "django-filter>=26.1",
     "python-dotenv==1.0.1",
 ]
-
 
 [tool.ruff]
 line-length = 79
@@ -15,14 +15,15 @@ exclude = [
     ".venv",
     "venv",
     "manage.py",
-    "*/migrations"
+    "*/migrations",
+    "*/__init__.py"
 ]
 
 [tool.ruff.lint]
 select = ["E", "W", "F"]
 
 [tool.ruff.lint.per-file-ignores]
-"*/settings.py" = ["E501"]
+"**/settings.py" = ["E501"]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -42,4 +43,7 @@ django_settings_module = "backend.settings"
 dev = [
     "isort>=8.0.1",
     "ruff>=0.16.0",
+    "mypy>=2.3.0",
+    "django-stubs>=6.0.7",
+    "pre-commit>=4.6.1",
 ]
