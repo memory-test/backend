@@ -1,9 +1,9 @@
 from django.db import transaction
-from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from api.v1.filters import ExerciseFilter
@@ -43,21 +43,22 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     search_fields = ('title',)
     ordering_fields = ('title', 'type__name', 'difficulty', 'created_at')
 
+    def get_serializer_class(self):
+        if self.action == 'pass_exercise':
+            return ExerciseSessionSerializer
+        return super().get_serializer_class()
 
-class PassExerciseView(APIView):
-    """/api/v1/exercises/<int:exercise_id>/."""
-
-    # Данный эдпоинт по логике больше подходить для создания новых упражений.
-    # Логичнее для проходения упражнений использовать:
-    # */pass_exercises/<int:exercise_id>/ либо что-то с сессией связанное
-
-    def post(self, request, exercise_id: int):
-        """сохраняем ответы пользователя, нужно для статистики."""
-        serializer = ExerciseSessionSerializer(data=request.data)
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='pass',
+        permission_classes=[IsAuthenticated],
+    )
+    def pass_exercise(self, request, pk=None):
+        exercise = self.get_object()
+        serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         clean_data: dict = serializer.validated_data
-        # сразу получим объект задания, чтобы избежать лишних запросов в бд.
-        exercise = get_object_or_404(Exercise, id=exercise_id)
         task_result: dict = check_answer(
             exercise, clean_data.get('answer_data')
         )
@@ -75,7 +76,7 @@ class PassExerciseView(APIView):
         with transaction.atomic():
             session = ExerciseSession.objects.create(
                 user=request.user,
-                exercise_id=exercise_id,
+                exercise_id=exercise,
                 difficulty=task_result.get('difficulty'),
                 started_at=clean_data.get('started_at'),
                 finished_at=clean_data.get('finished_at'),
@@ -101,11 +102,3 @@ class PassExerciseView(APIView):
             },
             status=status.HTTP_201_CREATED,
         )
-
-
-class PassedExerciseListView(APIView):
-    """path /api/v1/exercises/ здесь будем обрабатывать этот эндпоинт."""
-
-    # Эндпоинт занят списком доступных упражений.
-
-    pass
