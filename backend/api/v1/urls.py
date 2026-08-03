@@ -1,5 +1,5 @@
 from django.urls import include, path
-from rest_framework.routers import SimpleRouter
+from rest_framework.routers import DefaultRouter
 
 from api.v1.views.exercises import (
     ExerciseTypeViewSet,
@@ -7,7 +7,7 @@ from api.v1.views.exercises import (
     PassExerciseView,
 )
 
-router = SimpleRouter()
+router = DefaultRouter()
 router.register('exercises', ExerciseViewSet)
 router.register('exercises/types', ExerciseTypeViewSet)
 
