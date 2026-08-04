@@ -1,12 +1,12 @@
 from django.db import models
 
-from common.choices import Difficulty
 from exercises.constants import (
     DESC_LENGTH,
     EX_TITLE_LENGTH,
     STR_LIMIT,
     TYPE_NAME_LENGTH,
 )
+from users.models import Difficulty
 
 
 class ExerciseBase(models.Model):

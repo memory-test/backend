@@ -2,16 +2,9 @@ from django.conf import settings
 from django.db import models
 
 from exercises.models import Exercise
+from users.models import Difficulty
 
 MAX_DIFFICULTY_LEN = 10
-
-
-class Difficulty(models.TextChoices):
-    """Варианты уровня сложностей для заданий."""
-
-    EASY = 'easy', 'Лёгкий'
-    MEDIUM = 'medium', 'Средний'
-    HARD = 'hard', 'Сложный'
 
 
 class ExerciseSession(models.Model):

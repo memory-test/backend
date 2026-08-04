@@ -1,7 +1,7 @@
 from django_filters import rest_framework as filters
 
-from common.choices import Difficulty
 from exercises.models import Exercise
+from users.models import Difficulty
 
 
 class ExerciseFilter(filters.FilterSet):
