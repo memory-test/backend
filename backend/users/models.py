@@ -2,18 +2,23 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.utils import timezone
 
-from . import constants
+from users import constants
+
+
+class Difficulty(models.TextChoices):
+    """Уровни сложности."""
+
+    EASY = 'easy', 'Лёгкий'
+    MEDIUM = 'medium', 'Средний'
+    HARD = 'hard', 'Сложный'
+
+    @classmethod
+    def get_max_length(cls) -> int:
+        return max(len(value) for value, _ in cls.choices)
 
 
 class User(AbstractUser):
     """Кастомная модель пользователя."""
-
-    class Difficulty(models.TextChoices):
-        """Уровни сложности."""
-
-        EASY = ('easy', 'Легкий')
-        MEDIUM = ('middle', 'Средний')
-        HARD = ('hard', 'сложный')
 
     class Role(models.TextChoices):
         """Роли пользователя."""

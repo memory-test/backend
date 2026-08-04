@@ -1,5 +1,8 @@
 def check_answer(exercise_id: int, data: dict) -> dict:
-    """Функция заглушка, здесь будет логика проверки ответа,
+    """
+    Функция заглушка.
+
+    Здесь будет логика проверки ответа,
     для полей success/is_correct и подсчет баллов - score.
     пример возвращаемых данных:
     {
@@ -9,3 +12,4 @@ def check_answer(exercise_id: int, data: dict) -> dict:
     "difficulty": "MEDIUM"
     }
     """
+    return {}
