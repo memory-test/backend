@@ -20,6 +20,10 @@ class Difficulty(models.TextChoices):
 class User(AbstractUser):
     """Кастомная модель пользователя."""
 
+    username = None
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['name']
+
     class Role(models.TextChoices):
         """Роли пользователя."""
 
