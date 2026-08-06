@@ -1,11 +1,7 @@
-"""
-api/v1/views/auth.py — эндпоинты авторизации.
+"""Эндпоинты авторизации.
 
-Эндпоинты и коды ответов не меняются. Диспетчеризация по "purpose" в
-CodeRequestView/CodeVerifyView — это явный словарь "purpose -> функция
-сервиса", а не скрытая ветка внутри одной универсальной функции.
-Вьюхи тонкие: валидация -> вызов сервиса -> ответ. Активация аккаунта
-и выдача JWT живут в сервисе (confirm_registration/login_with_code).
+Регистрация, запрос и подтверждение одноразового кода, восстановление
+пароля, выдача JWT.
 """
 
 from rest_framework import status
@@ -24,14 +20,12 @@ from authentication import services
 
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
 
-# purpose -> функция сервиса, которая шлёт код для этого флоу
 _REQUEST_CODE_HANDLERS = {
     services.REGISTRATION: services.resend_registration_code,
     services.LOGIN: services.request_login_code,
     services.PASSWORD_RESET: services.start_password_reset,
 }
 
-# purpose -> функция сервиса, которая проверяет код и возвращает (user, tokens)
 _VERIFY_CODE_HANDLERS = {
     services.REGISTRATION: services.confirm_registration,
     services.LOGIN: services.login_with_code,
