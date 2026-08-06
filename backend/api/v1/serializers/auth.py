@@ -47,14 +47,6 @@ class RegisterSerializer(serializers.Serializer):
                 raise serializers.ValidationError(list(exc.messages))
         return value
 
-    def create(self, validated_data):
-        return services.start_registration(
-            email=validated_data['email'],
-            name=validated_data['name'],
-            password=validated_data.get('password'),
-            birth_date=validated_data.get('birth_date'),
-        )
-
 
 class CodeRequestSerializer(serializers.Serializer):
     """Запрос кода подтверждения."""

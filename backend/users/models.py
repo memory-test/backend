@@ -111,3 +111,9 @@ class User(AbstractUser):
     def __str__(self):
         """Возвращает строковое представление."""
         return self.name
+
+    def save(self, *args, **kwargs):
+        """Админ (role=ADMIN) получает is_staff автоматически."""
+        if self.role == self.Role.ADMIN:
+            self.is_staff = True
+        super().save(*args, **kwargs)

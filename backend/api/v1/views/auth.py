@@ -41,7 +41,7 @@ class RegisterView(APIView):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            user = serializer.save()
+            user = services.start_registration(**serializer.validated_data)
         except (services.CooldownError, services.RateLimitError) as exc:
             return Response(
                 {'detail': str(exc)},
