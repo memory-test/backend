@@ -1,8 +1,17 @@
+"""
+api/v1/views/auth.py — эндпоинты авторизации.
+
+Эндпоинты и коды ответов не меняются. Диспетчеризация по "purpose" в
+CodeRequestView/CodeVerifyView — это явный словарь "purpose -> функция
+сервиса", а не скрытая ветка внутри одной универсальной функции.
+Вьюхи тонкие: валидация -> вызов сервиса -> ответ. Активация аккаунта
+и выдача JWT живут в сервисе (confirm_registration/login_with_code).
+"""
+
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
 
 from api.v1.serializers import (
     CodeRequestSerializer,
@@ -11,25 +20,22 @@ from api.v1.serializers import (
     PasswordResetSerializer,
     RegisterSerializer,
 )
-from authentication.services import (
-    PASSWORD_RESET,
-    REGISTRATION,
-    CodeVerificationError,
-    CooldownError,
-    RateLimitError,
-    request_code,
-    reset_password,
-    verify_code,
-)
-from users.models import User
+from authentication import services
 
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
 
+# purpose -> функция сервиса, которая шлёт код для этого флоу
+_REQUEST_CODE_HANDLERS = {
+    services.REGISTRATION: services.resend_registration_code,
+    services.LOGIN: services.request_login_code,
+    services.PASSWORD_RESET: services.start_password_reset,
+}
 
-def issue_tokens(user):
-    """Возвращает пару JWT (access, refresh) для пользователя."""
-    refresh = RefreshToken.for_user(user)
-    return {'access': str(refresh.access_token), 'refresh': str(refresh)}
+# purpose -> функция сервиса, которая проверяет код и возвращает (user, tokens)
+_VERIFY_CODE_HANDLERS = {
+    services.REGISTRATION: services.confirm_registration,
+    services.LOGIN: services.login_with_code,
+}
 
 
 class RegisterView(APIView):
@@ -42,7 +48,7 @@ class RegisterView(APIView):
         serializer.is_valid(raise_exception=True)
         try:
             user = serializer.save()
-        except (CooldownError, RateLimitError) as exc:
+        except (services.CooldownError, services.RateLimitError) as exc:
             return Response(
                 {'detail': str(exc)},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -64,12 +70,11 @@ class CodeRequestView(APIView):
     def post(self, request):
         serializer = CodeRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        purpose = serializer.validated_data['purpose']
+        handler = _REQUEST_CODE_HANDLERS[purpose]
         try:
-            request_code(
-                serializer.validated_data['email'],
-                serializer.validated_data['purpose'],
-            )
-        except (CooldownError, RateLimitError) as exc:
+            handler(serializer.validated_data['email'])
+        except (services.CooldownError, services.RateLimitError) as exc:
             return Response(
                 {'detail': str(exc)},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -85,20 +90,18 @@ class CodeVerifyView(APIView):
     def post(self, request):
         serializer = CodeVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
-        code = serializer.validated_data['code']
         purpose = serializer.validated_data['purpose']
+        handler = _VERIFY_CODE_HANDLERS[purpose]
         try:
-            verify_code(email, code, purpose)
-        except CodeVerificationError as exc:
+            _, tokens = handler(
+                serializer.validated_data['email'],
+                serializer.validated_data['code'],
+            )
+        except services.CodeVerificationError as exc:
             return Response(
                 {'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
-        user = User.objects.get(email=email)
-        if purpose == REGISTRATION and not user.is_active:
-            user.is_active = True
-            user.save(update_fields=['is_active'])
-        return Response(issue_tokens(user))
+        return Response(tokens)
 
 
 class PasswordResetView(APIView):
@@ -110,8 +113,8 @@ class PasswordResetView(APIView):
         serializer = PasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            request_code(serializer.validated_data['email'], PASSWORD_RESET)
-        except (CooldownError, RateLimitError) as exc:
+            services.start_password_reset(serializer.validated_data['email'])
+        except (services.CooldownError, services.RateLimitError) as exc:
             return Response(
                 {'detail': str(exc)},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -128,12 +131,12 @@ class PasswordResetConfirmView(APIView):
         serializer = PasswordResetConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            reset_password(
+            services.confirm_password_reset(
                 serializer.validated_data['email'],
                 serializer.validated_data['code'],
                 serializer.validated_data['new_password'],
             )
-        except CodeVerificationError as exc:
+        except services.CodeVerificationError as exc:
             return Response(
                 {'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )

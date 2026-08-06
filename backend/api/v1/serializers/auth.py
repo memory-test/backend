@@ -48,7 +48,7 @@ class RegisterSerializer(serializers.Serializer):
         return value
 
     def create(self, validated_data):
-        return services.register_user(
+        return services.start_registration(
             email=validated_data['email'],
             name=validated_data['name'],
             password=validated_data.get('password'),

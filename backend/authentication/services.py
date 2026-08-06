@@ -1,3 +1,17 @@
+"""
+authentication/services.py — сервисный слой авторизации.
+
+Идея: вместо одной универсальной пары request_code/verify_code,
+которая ветвится по параметру purpose внутри себя, — явные функции
+на каждый флоу (registration / login / password_reset). Общая
+инфраструктура (генерация, хранение, кулдаун/лимиты, проверка кода)
+вынесена в приватные хелперы с префиксом _, каждый публичный флоу
+вызывает их без собственного if/elif по purpose.
+
+API эндпоинтов и модель EmailCode не меняются — только внутренняя
+организация сервисного слоя.
+"""
+
 import secrets
 from datetime import timedelta
 
@@ -32,55 +46,47 @@ class CodeVerificationError(CodeError):
     """Код недействителен, просрочен или лимит попыток исчерпан."""
 
 
-def generate_code() -> str:
+_SUBJECTS = {
+    REGISTRATION: 'Подтверждение регистрации',
+    LOGIN: 'Код для входа',
+    PASSWORD_RESET: 'Восстановление пароля',
+}
+_TEMPLATES = {
+    REGISTRATION: 'Ваш код подтверждения регистрации: {code}',
+    LOGIN: 'Ваш код для входа: {code}',
+    PASSWORD_RESET: 'Ваш код для сброса пароля: {code}',
+}
+
+
+def _generate_code() -> str:
     """Возвращает случайный цифровой код заданной длины."""
     max_value = 10**constants.CODE_LEN
     return str(secrets.randbelow(max_value)).zfill(constants.CODE_LEN)
 
 
-def register_user(email, name, password=None, birth_date=None):
-    """Создаёт неактивного пользователя и отправляет код подтверждения."""
-    user = User(
-        email=email,
-        name=name,
-        birth_date=birth_date,
-        is_active=False,
+def _send_code_email(email: str, code: str, purpose: str) -> None:
+    """Отправляет письмо с кодом (тема/текст зависят от purpose)."""
+    send_mail(
+        subject=_SUBJECTS[purpose],
+        message=_TEMPLATES[purpose].format(code=code),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[email],
+        fail_silently=False,
     )
-    if password:
-        user.set_password(password)
-    else:
-        user.set_unusable_password()
-    user.save()
-    create_code(email, REGISTRATION)
-    return user
 
 
-def request_code(email, purpose):
-    """Отправляет код, если для (email, purpose) есть основание.
-
-    Для несуществующих/неактивных пользователей молча ничего не делает
-    (анти-enumeration). Поднимает CooldownError/RateLimitError при лимитах.
-    """
-    user = User.objects.filter(email=email).first()
-    if purpose == REGISTRATION:
-        # Повторная отправка только для незавершённой регистрации.
-        if user is None or user.is_active:
-            return
-    elif user is None or not user.is_active:
-        return
-    create_code(email, purpose)
-
-
-def create_code(email, purpose):
+def _issue_code(email: str, purpose: str) -> None:
     """Создаёт новый код для (email, purpose) и отправляет его на почту.
 
-    Аннулирует предыдущие неиспользованные коды для этой пары.
+    Общая точка входа для всех флоу: проверяет кулдаун и лимит отправок,
+    аннулирует предыдущие неиспользованные коды, создаёт новый и шлёт email.
     Поднимает CooldownError/RateLimitError при превышении лимитов.
     """
     now = timezone.now()
     active_codes = EmailCode.objects.filter(
         email=email, purpose=purpose, is_used=False
     )
+
     last = active_codes.order_by('-created_at').first()
     cooldown = timedelta(seconds=constants.CODE_COOLDOWN_SECONDS)
     if last is not None and last.created_at + cooldown > now:
@@ -95,41 +101,21 @@ def create_code(email, purpose):
         raise RateLimitError('Слишком много запросов кода. Попробуйте позже.')
 
     active_codes.delete()
-    code = generate_code()
+    code = _generate_code()
     EmailCode.objects.create(
         email=email,
         code_hash=make_password(code),
         purpose=purpose,
         expires_at=now + timedelta(minutes=constants.CODE_TTL_MINUTES),
     )
-    send_code_email(email, code, purpose)
+    _send_code_email(email, code, purpose)
 
 
-def send_code_email(email, code, purpose):
-    """Отправляет код подтверждения на email (тема/текст по назначению)."""
-    subjects = {
-        REGISTRATION: 'Подтверждение регистрации',
-        LOGIN: 'Код для входа',
-        PASSWORD_RESET: 'Восстановление пароля',
-    }
-    templates = {
-        REGISTRATION: 'Ваш код подтверждения регистрации: {code}',
-        LOGIN: 'Ваш код для входа: {code}',
-        PASSWORD_RESET: 'Ваш код для сброса пароля: {code}',
-    }
-    send_mail(
-        subject=subjects[purpose],
-        message=templates[purpose].format(code=code),
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[email],
-        fail_silently=False,
-    )
+def _consume_code(email: str, code: str, purpose: str) -> None:
+    """Проверяет код для (email, purpose) и помечает его использованным.
 
-
-def verify_code(email, code, purpose):
-    """Проверяет код и возвращает объект EmailCode при успехе.
-
-    Поднимает CodeVerificationError при любой ошибке проверки.
+    Поднимает CodeVerificationError при любой ошибке проверки
+    (не найден, просрочен, лимит попыток, неверный код).
     """
     instance = (
         EmailCode.objects.filter(email=email, purpose=purpose, is_used=False)
@@ -154,21 +140,18 @@ def verify_code(email, code, purpose):
         raise CodeVerificationError('Неверный код.')
     instance.is_used = True
     instance.save(update_fields=['is_used'])
-    return instance
 
 
-def reset_password(email, code, new_password):
-    """Проверяет код сброса и устанавливает новый пароль."""
-    verify_code(email, code, PASSWORD_RESET)
-    user = User.objects.get(email=email)
-    user.set_password(new_password)
-    user.save()
-    blacklist_user_tokens(user)
+def _issue_tokens(user: User) -> dict:
+    """Возвращает пару JWT (access, refresh) для пользователя."""
+    from rest_framework_simplejwt.tokens import RefreshToken
+
+    refresh = RefreshToken.for_user(user)
+    return {'access': str(refresh.access_token), 'refresh': str(refresh)}
 
 
-def blacklist_user_tokens(user):
+def _blacklist_user_tokens(user: User) -> None:
     """Блокирует все ранее выданные токены пользователя."""
-    # Локальный импорт, чтобы не связывать слой сервисов с JWT-моделями.
     from rest_framework_simplejwt.token_blacklist.models import (
         BlacklistedToken,
         OutstandingToken,
@@ -176,3 +159,83 @@ def blacklist_user_tokens(user):
 
     for token in OutstandingToken.objects.filter(user=user):
         BlacklistedToken.objects.get_or_create(token=token)
+
+
+def start_registration(
+    email: str, name: str, password: str | None = None, birth_date=None
+) -> User:
+    """Создаёт неактивного пользователя и отправляет код подтверждения.
+
+    Если password не передан — регистрация упрощённая (пароль не задаётся,
+    вход в дальнейшем только по коду).
+    """
+    user = User(email=email, name=name, birth_date=birth_date, is_active=False)
+    if password:
+        user.set_password(password)
+    else:
+        user.set_unusable_password()
+    user.save()
+    _issue_code(email, REGISTRATION)
+    return user
+
+
+def resend_registration_code(email: str) -> None:
+    """Повторно отправляет код регистрации, если она не завершена.
+
+    Анти-enumeration: для несуществующего/уже активного пользователя
+    молча ничего не делает.
+    """
+    user = User.objects.filter(email=email).first()
+    if user is None or user.is_active:
+        return
+    _issue_code(email, REGISTRATION)
+
+
+def confirm_registration(email: str, code: str) -> tuple[User, dict]:
+    """Подтверждает код регистрации, активирует пользователя, выдаёт JWT."""
+    _consume_code(email, code, REGISTRATION)
+    user = User.objects.get(email=email)
+    if not user.is_active:
+        user.is_active = True
+        user.save(update_fields=['is_active'])
+    return user, _issue_tokens(user)
+
+
+def request_login_code(email: str) -> None:
+    """Отправляет код для входа активному пользователю.
+
+    Анти-enumeration: для несуществующего/неактивного пользователя
+    молча ничего не делает.
+    """
+    user = User.objects.filter(email=email).first()
+    if user is None or not user.is_active:
+        return
+    _issue_code(email, LOGIN)
+
+
+def login_with_code(email: str, code: str) -> tuple[User, dict]:
+    """Подтверждает код входа и выдаёт JWT."""
+    _consume_code(email, code, LOGIN)
+    user = User.objects.get(email=email)
+    return user, _issue_tokens(user)
+
+
+def start_password_reset(email: str) -> None:
+    """Отправляет код сброса пароля активному пользователю.
+
+    Анти-enumeration: для несуществующего/неактивного пользователя
+    молча ничего не делает.
+    """
+    user = User.objects.filter(email=email).first()
+    if user is None or not user.is_active:
+        return
+    _issue_code(email, PASSWORD_RESET)
+
+
+def confirm_password_reset(email: str, code: str, new_password: str) -> None:
+    """Проверяет код сброса, ставит новый пароль, блокирует старые токены."""
+    _consume_code(email, code, PASSWORD_RESET)
+    user = User.objects.get(email=email)
+    user.set_password(new_password)
+    user.save()
+    _blacklist_user_tokens(user)
