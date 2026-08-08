@@ -1,5 +1,8 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
+from exercises.models import Exercise, ExerciseType
+from exercises.services import check_answer
+from progress.models import ExerciseSession, UserAnswer
 from rest_framework import filters, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -12,9 +15,6 @@ from api.v1.serializers import (
     ExerciseSessionSerializer,
     ExerciseTypeSerializer,
 )
-from exercises.models import Exercise, ExerciseType
-from exercises.services import check_answer
-from progress.models import ExerciseSession, UserAnswer
 
 # Вьюсеты приложения exercises неаписаны на readonly, т.к. на данный момент нет
 # понимания будет ли админиистратор использовать фунционал api через фронт,

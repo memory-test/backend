@@ -1,6 +1,5 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-from django.utils import timezone
 
 from users import constants
 
@@ -27,51 +26,22 @@ class User(AbstractUser):
         ADMIN = ('admin', 'Администратор')
 
     name = models.CharField(
-        max_length=constants.NAME_LEN,
-        verbose_name='Имя',
-        help_text='Имя пользователя',
+        max_length=constants.NAME_LENGTH, verbose_name='Имя'
     )
     birth_date = models.DateField(
-        null=True,
-        blank=True,
-        verbose_name='Дата рождения',
-        help_text='Дата рождения',
+        null=True, blank=True, verbose_name='Дата рождения'
     )
     current_difficulty = models.CharField(
-        max_length=constants.CURRENT_DIFFICULTY_LEN,
+        max_length=constants.CURRENT_DIFFICULTY_LENGTH,
         choices=Difficulty.choices,
         default=Difficulty.EASY,
         verbose_name='Уровень сложности',
-        help_text='Текущий уровень сложности',
     )
     role = models.CharField(
-        max_length=constants.ROLE_LEN,
+        max_length=constants.ROLE_LENGTH,
         choices=Role.choices,
         default=Role.USER,
         verbose_name='Роль',
-        help_text='Роль пользователя',
-    )
-    email = models.EmailField(
-        max_length=constants.EMAIL_LEN,
-        unique=True,
-        verbose_name='Электронная почта',
-        help_text='Электронная почта пользователя',
-    )
-    password = models.CharField(
-        max_length=constants.PASSWORD_LEN,
-        verbose_name='Пароль',
-        help_text='Пароль для доступа в аккаунт',
-    )
-    last_login = models.DateTimeField(
-        blank=True,
-        null=True,
-        verbose_name='Последний вход',
-        help_text='Последний вход в аккаунт',
-    )
-    created_at = models.DateTimeField(
-        default=timezone.now,
-        verbose_name='Дата регистрации',
-        help_text='Дата регистрации пользователя',
     )
 
     class Meta:

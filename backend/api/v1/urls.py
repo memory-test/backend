@@ -1,10 +1,7 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from api.v1.views.exercises import (
-    ExerciseTypeViewSet,
-    ExerciseViewSet,
-)
+from api.v1.views.exercises import ExerciseTypeViewSet, ExerciseViewSet
 
 router = DefaultRouter()
 router.register('exercises', ExerciseViewSet)
