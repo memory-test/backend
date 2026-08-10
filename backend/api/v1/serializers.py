@@ -1,8 +1,35 @@
 from rest_framework import serializers
 
+from exercises.models import Exercise, ExerciseType
 
-# По названию класса это выглядит, как сериализатор модели Заданий,
-# хотя это не так. Скорее всего это для сессии упражения.
+
+class ExerciseTypeSerializer(serializers.ModelSerializer):
+    """Сериализатор объектов класса ExerciseType."""
+
+    class Meta:
+        model = ExerciseType
+        fields = ('id', 'name', 'description')
+
+
+class ExerciseSerializer(serializers.ModelSerializer):
+    """Сериализатор объектов класса Exercise."""
+
+    type = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Exercise
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'config',
+            'is_active',
+            'created_at',
+        )
+
+
 class ExerciseSessionSerializer(serializers.Serializer):
     """Валидирует данные, которые присылвает фронтенд."""
 

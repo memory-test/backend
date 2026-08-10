@@ -6,7 +6,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from api.v1.filters import ExerciseFilter
+from api.filters import ExerciseFilter
 from api.v1.serializers import (
     ExerciseSerializer,
     ExerciseSessionSerializer,
@@ -15,10 +15,6 @@ from api.v1.serializers import (
 from exercises.models import Exercise, ExerciseType
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
-
-# Вьюсеты приложения exercises неаписаны на readonly, т.к. на данный момент нет
-# понимания будет ли админиистратор использовать фунционал api через фронт,
-# либо только использовать панель администратора.
 
 
 class ExerciseTypeViewSet(ReadOnlyModelViewSet):

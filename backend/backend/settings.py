@@ -110,6 +110,6 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticatedOrReadOnly',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'api.v1.pagination.PageNumberLimitPagination',
+    'DEFAULT_PAGINATION_CLASS': 'api.pagination.PageNumberLimitPagination',
     'PAGE_SIZE': 5,
 }
