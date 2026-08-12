@@ -1,4 +1,5 @@
 from django_filters import rest_framework as filters
+
 from exercises.models import Exercise
 from users.models import Difficulty
 

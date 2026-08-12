@@ -1,5 +1,4 @@
 from django.db import models
-from users.models import Difficulty
 
 from exercises.constants import (
     DESC_LENGTH,
@@ -7,6 +6,7 @@ from exercises.constants import (
     STR_LIMIT,
     TYPE_NAME_LENGTH,
 )
+from users.models import Difficulty
 
 
 class ExerciseBase(models.Model):
