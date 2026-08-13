@@ -1,47 +1,28 @@
 from django.contrib import admin
-
-from exercises.models import Exercise, ExerciseType
-
-
-@admin.register(ExerciseType)
-class ExerciseTypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description')
-    search_fields = ('name',)
-
-    fields = ('name', 'description')
+from django.forms import BaseInlineFormSet
+from .models import ChoiceExercise, ChoiceOption
 
 
-@admin.register(Exercise)
-class ExerciseAdmin(admin.ModelAdmin):
-    list_display = (
-        'title',
-        'type__name',
-        'difficulty',
-        'is_active',
-        'created_at',
-    )
-    list_editable = ('difficulty', 'is_active')
-    search_fields = ('title',)
-    list_filter = ('type__name', 'difficulty', 'is_active', 'created_at')
+class ChoiceOptionFormSet(BaseInlineFormSet):
+    # TODO: написать валидатор для проверки вариантов ответов.
 
-    readonly_fields = ('created_at',)
-    fieldsets = (
-        (
-            'Oсновная информация',
-            {
-                'fields': (
-                    'title',
-                    'description',
-                    'type',
-                    'difficulty',
-                    'config',
-                ),
-            },
-        ),
-        (
-            'Дoполнительная информация',
-            {
-                'fields': (('is_active', 'created_at')),
-            },
-        ),
-    )
+
+class ChoiceOptionInline(admin.TabularInline):
+    """
+    Описывает отображение вариантов ответов внутри карточки задания.
+    """
+    model = ChoiceOption
+    formset = ChoiceOptionFormSet
+    extra = 4
+    min_num = 2
+    fields = ('text', 'is_correct')
+
+@admin.register(ChoiceExercise)
+class ChoiceExerciseAdmin(admin.ModelAdmin):
+    list_display = ('title', 'difficulty', 'is_multiple', 'is_active', 'created_at')
+    list_filter = ('difficulty', 'is_multiple', 'is_active', 'created_at')
+    search_fields = ('title', 'description')
+    # админ сможет удобно добавлять варианты ответов к заданию.
+    inlines = [ChoiceOptionInline]
+
+

@@ -1,15 +1,39 @@
-def check_answer(exercise_id: int, data: dict) -> dict:
-    """
-    Функция заглушка.
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
-    Здесь будет логика проверки ответа,
-    для полей success/is_correct и подсчет баллов - score.
-    пример возвращаемых данных:
-    {
-    "is_correct": True,
-    "score": 100.0,
-    "success": True,
-    "difficulty": "MEDIUM"
-    }
-    """
-    return {}
+
+@dataclass
+class EvaluationResult:
+    """Универсальный дата класс для возврата результатов проверки"""
+    is_correct: bool
+    score: float
+    success: bool
+
+class AbstractExerciseService(ABC):
+    """Интерфейс для работы с заданиями."""
+
+    @abstractmethod
+    def get_exercise_content(self, exercise_id: int) -> dict:
+        """
+        Принимает ID задания, достает его из БД и формирует
+        словарь для начала выполнения задания.
+        """
+        ...
+
+    @abstractmethod
+    def check_answer(self, exercise_id: int, user_answer_data: dict) -> EvaluationResult:
+        """
+        Полная проверка результатов задания.
+        Сравнивает ответ пользователя с эталоном из БД.
+        """
+        ...
+
+
+class ChooseExerciseService(AbstractExerciseService):
+
+    def get_exercise_content(self, exercise_id: int) -> dict:
+        pass
+
+    def check_answer(self, exercise_id: int, user_answer_data: dict) -> EvaluationResult:
+        pass
+
