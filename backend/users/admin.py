@@ -11,12 +11,17 @@ class UserAdmin(Admin):
     """Модель пользователя в админке."""
 
     list_display = (
-        'username',
         'email',
+        'name',
+        'role',
+        'is_active',
     )
-    list_filter = ('username',)
+    list_filter = (
+        'role',
+        'is_active',
+    )
     search_fields = (
-        'username',
         'email',
+        'name',
     )
-    ordering = ('username',)
+    ordering = ('-date_joined',)

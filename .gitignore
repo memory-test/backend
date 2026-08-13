@@ -150,3 +150,6 @@ dmypy.json
 media/
 sent_emails/
 
+# CodeGraph index
+.codegraph/
+
