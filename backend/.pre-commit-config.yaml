@@ -3,7 +3,6 @@ repos:
     rev: v0.16.0
     hooks:
       - id: ruff-format
-  - repo: https://github.com/pycqa/isort
-    rev: 8.0.1
-    hooks:
-      - id: isort
+      - id: ruff-check
+        exclude: "^backend/.*/migrations/"
+        entry: uv run ruff check --fix
