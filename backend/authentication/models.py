@@ -1,8 +1,8 @@
 from django.db import models
 
-from users.constants import EMAIL_LEN, PASSWORD_LEN
+from users.constants import EMAIL_LENGTH, PASSWORD_LENGTH
 
-from .constants import PURPOSE_LEN
+from .constants import PURPOSE_LENGTH
 
 
 class EmailCode(models.Model):
@@ -14,17 +14,17 @@ class EmailCode(models.Model):
         PASSWORD_RESET = ('password_reset', 'Сброс пароля')
 
     email = models.EmailField(
-        max_length=EMAIL_LEN,
+        max_length=EMAIL_LENGTH,
         verbose_name='Электронная почта',
         help_text='Email, на который отправлен код',
     )
     code_hash = models.CharField(
-        max_length=PASSWORD_LEN,
+        max_length=PASSWORD_LENGTH,
         verbose_name='Хэш кода',
         help_text='Хэш одноразового кода (открыто не хранится)',
     )
     purpose = models.CharField(
-        max_length=PURPOSE_LEN,
+        max_length=PURPOSE_LENGTH,
         choices=Purpose.choices,
         verbose_name='Назначение',
         help_text='Для чего отправлен код',

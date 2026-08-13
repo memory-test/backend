@@ -53,8 +53,8 @@ _TEMPLATES = {
 
 def _generate_code() -> str:
     """Возвращает случайный цифровой код заданной длины."""
-    max_value = 10**constants.CODE_LEN
-    return str(secrets.randbelow(max_value)).zfill(constants.CODE_LEN)
+    max_value = 10**constants.CODE_LENGTH
+    return str(secrets.randbelow(max_value)).zfill(constants.CODE_LENGTH)
 
 
 def _send_code_email(email: str, code: str, purpose: str) -> None:

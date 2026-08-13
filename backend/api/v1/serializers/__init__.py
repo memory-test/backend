@@ -6,8 +6,8 @@ from api.v1.serializers.auth import (
     RegisterSerializer,
 )
 from api.v1.serializers.exercises import (
-    ExerciseSerializer,
-    ExerciseTypeSerializer,
+                                          ExerciseSerializer,
+                                          ExerciseTypeSerializer,
 )
 from api.v1.serializers.progress import ExerciseSessionSerializer
 from api.v1.serializers.users import UserSerializer

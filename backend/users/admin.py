@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as Admin
 
 from .models import User
 
@@ -6,7 +7,7 @@ admin.site.empty_value_display = 'Не задано'
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(Admin):
     """Модель пользователя в админке."""
 
     list_display = (
@@ -23,4 +24,4 @@ class UserAdmin(admin.ModelAdmin):
         'email',
         'name',
     )
-    ordering = ('-created_at',)
+    ordering = ('-date_joined',)

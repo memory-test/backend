@@ -1,8 +1,8 @@
 # Длина поля "Назначение" кода:
-PURPOSE_LEN: int = 20
+PURPOSE_LENGTH: int = 20
 
 # Длина одноразового кода:
-CODE_LEN: int = 6
+CODE_LENGTH: int = 6
 
 # Срок действия кода (в минутах):
 CODE_TTL_MINUTES: int = 10

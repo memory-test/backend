@@ -3,9 +3,9 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from authentication import services
-from authentication.constants import CODE_LEN
+from authentication.constants import CODE_LENGTH
 from authentication.models import EmailCode
-from users.constants import EMAIL_LEN, NAME_LEN
+from users.constants import EMAIL_LENGTH, NAME_LENGTH
 from users.models import User
 
 PASSWORD_STYLE = {'input_type': 'password'}
@@ -19,8 +19,8 @@ VERIFY_PURPOSES = (
 class RegisterSerializer(serializers.Serializer):
     """Регистрация: email + имя, пароль опционален (упрощённая регистрация)."""
 
-    email = serializers.EmailField(max_length=EMAIL_LEN)
-    name = serializers.CharField(max_length=NAME_LEN)
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
+    name = serializers.CharField(max_length=NAME_LENGTH)
     password = serializers.CharField(
         write_only=True,
         required=False,
@@ -51,16 +51,16 @@ class RegisterSerializer(serializers.Serializer):
 class CodeRequestSerializer(serializers.Serializer):
     """Запрос кода подтверждения."""
 
-    email = serializers.EmailField(max_length=EMAIL_LEN)
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
     purpose = serializers.ChoiceField(choices=EmailCode.Purpose.choices)
 
 
 class CodeVerifySerializer(serializers.Serializer):
     """Подтверждение кода (регистрация / вход) — возвращает JWT."""
 
-    email = serializers.EmailField(max_length=EMAIL_LEN)
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
     code = serializers.CharField(
-        max_length=CODE_LEN, min_length=1, trim_whitespace=True
+        max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
     )
     purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)
 
@@ -68,15 +68,15 @@ class CodeVerifySerializer(serializers.Serializer):
 class PasswordResetSerializer(serializers.Serializer):
     """Запрос сброса пароля."""
 
-    email = serializers.EmailField(max_length=EMAIL_LEN)
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
 
 
 class PasswordResetConfirmSerializer(serializers.Serializer):
     """Сброс пароля по коду из email."""
 
-    email = serializers.EmailField(max_length=EMAIL_LEN)
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
     code = serializers.CharField(
-        max_length=CODE_LEN, min_length=1, trim_whitespace=True
+        max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
     )
     new_password = serializers.CharField(
         write_only=True,
