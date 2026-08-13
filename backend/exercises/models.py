@@ -3,7 +3,6 @@ from django.db import models
 from exercises.constants import (
     DESC_LENGTH,
     EX_TITLE_LENGTH,
-    STR_LIMIT,
     TYPE_NAME_LENGTH,
 )
 from users.models import Difficulty
@@ -37,7 +36,7 @@ class ExerciseType(ExerciseBase):
         ]
 
     def __str__(self):
-        return self.name[:STR_LIMIT]
+        return self.name
 
 
 class Exercise(ExerciseBase):
@@ -67,4 +66,4 @@ class Exercise(ExerciseBase):
         ]
 
     def __str__(self):
-        return self.title[:STR_LIMIT]
+        return self.title

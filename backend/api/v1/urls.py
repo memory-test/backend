@@ -5,18 +5,16 @@ from rest_framework_simplejwt.views import (
     TokenRefreshView,
 )
 
-from api.v1.views.auth import (
+from api.v1.views import (
     CodeRequestView,
     CodeVerifyView,
+    ExerciseTypeViewSet,
+    ExerciseViewSet,
+    MeView,
     PasswordResetConfirmView,
     PasswordResetView,
     RegisterView,
 )
-from api.v1.views.exercises import (
-    ExerciseTypeViewSet,
-    ExerciseViewSet,
-)
-from api.v1.views.users import MeView
 
 router = DefaultRouter()
 router.register('exercises', ExerciseViewSet)

@@ -53,4 +53,6 @@ dev = [
     "mypy>=2.3.0",
     "django-stubs>=6.0.7",
     "pre-commit>=4.6.1",
+    "djangorestframework-stubs>=3.18.0",
+    "django-filter-stubs>=0.1.3",
 ]

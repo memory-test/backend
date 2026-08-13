@@ -5,8 +5,67 @@ from rest_framework import serializers
 from authentication import services
 from authentication.constants import CODE_LENGTH
 from authentication.models import EmailCode
+from exercises.models import Exercise, ExerciseType
 from users.constants import EMAIL_LENGTH, NAME_LENGTH
 from users.models import User
+
+
+class ExerciseTypeSerializer(serializers.ModelSerializer):
+    """Сериализатор объектов класса ExerciseType."""
+
+    class Meta:
+        model = ExerciseType
+        fields = ('id', 'name', 'description')
+
+
+class ExerciseSerializer(serializers.ModelSerializer):
+    """Сериализатор объектов класса Exercise."""
+
+    type = serializers.StringRelatedField(read_only=True)
+
+    class Meta:
+        model = Exercise
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'config',
+            'is_active',
+            'created_at',
+        )
+
+
+class ExerciseSessionSerializer(serializers.Serializer):
+    """Валидирует данные, которые присылвает фронтенд."""
+
+    started_at = serializers.DateTimeField(required=True)
+    finished_at = serializers.DateTimeField(required=True)
+    duration_seconds = serializers.IntegerField(required=True)
+    # пока это поле рассчитано, что за одно упражнение пользователь
+    # отправляет один финальный результат, в дальнейшем напишем сериализатор.
+    answer_data = serializers.JSONField(required=True)
+
+    def validate(self, attrs):
+        """Проверяем согласованность даты начала и окончания задания."""
+        if attrs['started_at'] >= attrs['finished_at']:
+            raise serializers.ValidationError(
+                {
+                    'finished_at': (
+                        'Время окончания должно быть позже времени начала.'
+                    )
+                }
+            )
+        return attrs
+
+    def validate_duration_seconds(self, value):
+        if value < 0:
+            raise serializers.ValidationError(
+                'Продолжительность не может быть отрицательной.'
+            )
+        return value
+
 
 PASSWORD_STYLE = {'input_type': 'password'}
 
@@ -92,3 +151,21 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         except DjangoValidationError as exc:
             raise serializers.ValidationError(list(exc.messages))
         return value
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Профиль пользователя."""
+
+    class Meta:
+        model = User
+        fields = (
+            'id',
+            'email',
+            'name',
+            'birth_date',
+            'current_difficulty',
+            'role',
+            'is_active',
+            'created_at',
+        )
+        read_only_fields = fields
