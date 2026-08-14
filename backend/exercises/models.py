@@ -60,6 +60,8 @@ class ExerciseBase(models.Model):
 
 class ChoiceExercise(ExerciseBase):
     """Модель описывает тип заданий с единственным или множественным выбором."""
+    EXERCISE_TYPE = ExerciseType.CHOICE
+
     is_multiple = models.BooleanField(
         'Множественный выбор',
         default=False,
@@ -70,40 +72,35 @@ class ChoiceExercise(ExerciseBase):
         verbose_name = 'Тестовое задание'
         verbose_name_plural = 'Тестовые задания'
 
-    def save(self, *args, **kwargs):
-        self.type = ExerciseType.CHOICE
-        super().save(*args, **kwargs)
-
 
 class ChoiceOption(models.Model):
-        """
-        Модель описывает вариант ответа для заданий с единственным
-        или множественным выбором. Один вариант относится
-        только к одному заданию, так админ сможет гибко настраивать
-        кол-во вариантов для каждого задания.
-        """
-        exercise = models.ForeignKey(
-            ChoiceExercise,
-            on_delete=models.CASCADE,
-            related_name='options',  # Позволит делать запрос: exercise.options.all()
-            verbose_name='Задание'
-        )
-        text = models.CharField(
-            'Текст варианта ответа',
-            max_length=EX_TITLE_LENGTH
-        )
-        # этим полем админ будет указывать
-        # является ли этот вариант ответа правильным.
-        is_correct = models.BooleanField(
-            'Это правильный ответ',
-            default=False
-        )
+    """
+    Модель описывает вариант ответа для заданий с единственным
+    или множественным выбором. Один вариант относится
+    только к одному заданию, так админ сможет гибко настраивать
+    кол-во вариантов для каждого задания.
+    """
+    exercise = models.ForeignKey(
+        ChoiceExercise,
+        on_delete=models.CASCADE,
+        related_name='options',  # Позволит делать запрос: exercise.options.all()
+        verbose_name='Задание'
+    )
+    text = models.CharField(
+        'Текст варианта ответа',
+        max_length=EX_TITLE_LENGTH
+    )
+    # этим полем админ будет указывать
+    # является ли этот вариант ответа правильным.
+    is_correct = models.BooleanField(
+        'Это правильный ответ',
+        default=False
+    )
 
     class Meta:
         verbose_name = 'Вариант ответа'
         verbose_name_plural = 'Варианты ответов'
         ordering = ['id']
-
 
     def __str__(self):
         return f'Вариант ответа для задания {self.exercise}.'

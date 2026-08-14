@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import JSONField
 
 from exercises.models import Exercise
 from users.models import Difficulty
@@ -30,15 +31,15 @@ class ExerciseSession(models.Model):
     duration_seconds = models.IntegerField(verbose_name='Длительность (сек)')
     success = models.BooleanField(verbose_name='Успешно выполнено')
     score = models.FloatField(verbose_name='Оценка')
-    attempts_count = models.IntegerField(verbose_name='Количество попыток')
 
     class Meta:
-        db_table = 'exercise_sessions'
         verbose_name = 'Сессия упражнения'
         verbose_name_plural = 'Сессии упражнений'
         ordering = ['id']
 
 
+# TODO: Написать модель для сохранения ответов пользователя,
+#  с учетом типа задания.
 class UserAnswer(models.Model):
     session = models.ForeignKey(
         'ExerciseSession',
@@ -46,12 +47,10 @@ class UserAnswer(models.Model):
         related_name='answers',
         verbose_name='Сессия упражнения',
     )
-    answer_data = models.JSONField(verbose_name='Данные ответа (JSON)')
-    is_correct = models.BooleanField(verbose_name='Ответ верный')
+    answer_data = JSONField()
     response_time = models.FloatField(verbose_name='Время ответа (сек)')
 
     class Meta:
-        db_table = 'exercise_answers'
         verbose_name = 'Ответ пользователя'
         verbose_name_plural = 'Ответы пользователей'
         ordering = ['id']

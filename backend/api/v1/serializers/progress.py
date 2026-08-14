@@ -1,8 +1,8 @@
 from rest_framework import serializers
 
 
-# По названию класса это выглядит, как сериализатор модели Заданий,
-# хотя это не так. Скорее всего это для сессии упражения.
+
+# TODO: Полностью переделать!
 class ExerciseSessionSerializer(serializers.Serializer):
     """Валидирует данные, которые присылвает фронтенд."""
 
