@@ -27,11 +27,8 @@ exclude = [
 select = ["E", "W", "F", "I"]
 
 [tool.ruff.isort]
-known-first-party = [
-    "exercises",
-    "progress",
-    "users",
-    "api"
+known-local-folder = [
+    ".",
 ]
 
 [tool.ruff.lint.per-file-ignores]
