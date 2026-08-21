@@ -106,11 +106,11 @@ class TextImageMixin(models.Model):
             )
 
     class Meta:
-        absract = True
+        abstract = True
         constraints = [
             models.CheckConstraint(
                 condition=~Q(text='') | ~Q(image=''),
-                name='text_or_image_required',
+                name='%(app_label)s_%(class)s_text_or_image_required',
             )
         ]
 
@@ -194,7 +194,7 @@ class MatchingAnswer(Answer):
                     (~Q(first_text='') | ~Q(first_image=''))
                     & (~Q(second_text='') | ~Q(second_image=''))
                 ),
-                name='texts_or_images_required',
+                name='%(app_label)s_%(class)s_texts_or_images_required',
             )
         ]
 
