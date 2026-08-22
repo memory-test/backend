@@ -5,54 +5,39 @@ from django.db.models import Q
 from exercises.constants import (
     ANSWER_LIMIT,
     ANSWERS_GROUP_LIMIT,
-    DESC_LENGTH,
+    EX_DESC_LENGTH,
     EX_TITLE_LENGTH,
     QUESTION_LIMIT,
-    TYPE_NAME_LENGTH,
 )
 from users.models import Difficulty
 
 
-class ExerciseBase(models.Model):
-    """
-    Абстрактная модель для моделей приложения "Задания".
+class ExerciseType(models.TextChoices):
+    """Типы заданий."""
 
-    Содержит общее поле "Описание" для типов и самих заданий.
-    """
+    CHOICE = 'choice', 'Выбор ответа(ов)'
+    INPUT = 'input', 'Ручной ввод ответа'
+    ORDERING = 'ordering', 'Сортировка'
+    GROUPING = 'grouping', 'Группировка'
+    MATCHING = 'matching', 'Сопоставление'
+    DRAWING = 'drawing', 'Графический вопрос'
 
-    description = models.TextField('Описание', max_length=DESC_LENGTH)
-
-    class Meta:
-        abstract = True
-
-
-class ExerciseType(ExerciseBase):
-    """Модель типов заданий."""
-
-    name = models.CharField(
-        'Наименование', max_length=TYPE_NAME_LENGTH, unique=True
-    )
-    slug = models.SlugField('Идентификатор', unique=True)
-
-    class Meta:
-        verbose_name = 'тип задания'
-        verbose_name_plural = 'Типы заданий'
-        ordering = [
-            'name',
-        ]
-
-    def __str__(self):
-        return self.name
+    @classmethod
+    def get_max_length(cls) -> int:
+        return max(len(value) for value, _ in cls.choices)
 
 
-class Exercise(ExerciseBase):
+class Exercise(models.Model):
     """Модель заданий."""
 
     title = models.CharField(
         'Название', max_length=EX_TITLE_LENGTH, unique=True
     )
-    type = models.ForeignKey(
-        ExerciseType, on_delete=models.CASCADE, verbose_name='Тип задания'
+    description = models.TextField('Описание', max_length=EX_DESC_LENGTH)
+    type = models.CharField(
+        'Тип задания',
+        choices=ExerciseType.choices,
+        max_length=ExerciseType.get_max_length(),
     )
     difficulty = models.CharField(
         'Уровень сложности',
@@ -125,11 +110,17 @@ class InputAnswer(Answer):
         'Ожидаемый текст ответа', max_length=ANSWER_LIMIT
     )
 
+    def __str__(self):
+        return self.expected_text
+
 
 class ChoiceAnswer(TextImageMixin, Answer):
     """Ответы с выбором варианта(ов)."""
 
     is_correct = models.BooleanField('Верный')
+
+    def __str__(self):
+        return super().__str__()
 
     class Meta(TextImageMixin.Meta, Answer.Meta):
         ordering = [
