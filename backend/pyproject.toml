@@ -12,6 +12,7 @@ dependencies = [
     "psycopg2-binary==2.9.11",
     "djangorestframework-simplejwt>=5.5.1",
     "pillow>=12.3.0",
+    "drf-spectacular>=0.30.0",
 ]
 
 [tool.ruff]
@@ -28,11 +29,8 @@ exclude = [
 select = ["E", "W", "F", "I"]
 
 [tool.ruff.isort]
-known-first-party = [
-    "exercises",
-    "progress",
-    "users",
-    "api"
+known-local-folder = [
+    ".",
 ]
 
 [tool.ruff.lint.per-file-ignores]

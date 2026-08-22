@@ -59,10 +59,7 @@ class User(AbstractUser):
         max_length=constants.NAME_LENGTH, verbose_name='Имя'
     )
     email = models.EmailField(
-        unique=True,
-        blank=True,
-        null=True,
-        verbose_name='Электронная почта'
+        unique=True, blank=True, null=True, verbose_name='Электронная почта'
     )
     birth_date = models.DateField(
         null=True, blank=True, verbose_name='Дата рождения'

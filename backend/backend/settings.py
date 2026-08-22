@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     'exercises.apps.ExercisesConfig',
     'progress.apps.ProgressConfig',
     'api.apps.ApiConfig',
+    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -117,6 +118,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 
 REST_FRAMEWORK = {
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
@@ -125,6 +127,13 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PAGINATION_CLASS': 'api.pagination.PageNumberLimitPagination',
     'PAGE_SIZE': 5,
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Memory Trainer API',
+    'DESCRIPTION': 'API для тренажера памяти',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False
 }
 
 SIMPLE_JWT = {
