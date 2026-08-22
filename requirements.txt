@@ -1,9 +1,0 @@
-Django==6.0.7
-djangorestframework==3.17.1
-django-filter==26.1
-django-stubs==6.0.7
-python-dotenv==1.0.1
-ruff==0.16.0
-isort==8.0.1
-mypy==2.3.0
-pre-commit==4.6.1
