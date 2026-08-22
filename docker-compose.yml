@@ -14,7 +14,7 @@ services:
     depends_on:
       - db
     volumes:
-      - static:/backend_static
+      - static:/app/collected_static
   gateway:
     build: ./gateway/
     ports:
