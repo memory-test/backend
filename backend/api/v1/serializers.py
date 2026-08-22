@@ -5,23 +5,13 @@ from rest_framework import serializers
 from authentication import services
 from authentication.constants import CODE_LENGTH
 from authentication.models import EmailCode
-from exercises.models import Exercise, ExerciseType
+from exercises.models import Exercise
 from users.constants import EMAIL_LENGTH, NAME_LENGTH
 from users.models import User
 
 
-class ExerciseTypeSerializer(serializers.ModelSerializer):
-    """Сериализатор объектов класса ExerciseType."""
-
-    class Meta:
-        model = ExerciseType
-        fields = ('id', 'name', 'description')
-
-
 class ExerciseSerializer(serializers.ModelSerializer):
     """Сериализатор объектов класса Exercise."""
-
-    type = serializers.StringRelatedField(read_only=True)
 
     class Meta:
         model = Exercise

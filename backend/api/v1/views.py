@@ -14,30 +14,21 @@ from api.v1.serializers import (
     CodeVerifySerializer,
     ExerciseSerializer,
     ExerciseSessionSerializer,
-    ExerciseTypeSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     RegisterSerializer,
     UserSerializer,
 )
 from authentication import services
-from exercises.models import Exercise, ExerciseType
+from exercises.models import Exercise
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
-
-
-class ExerciseTypeViewSet(ReadOnlyModelViewSet):
-    """Вьюсет для чтения объектов модели ExerciseType."""
-
-    queryset = ExerciseType.objects.all()
-    serializer_class = ExerciseTypeSerializer
-    pagination_class = None
 
 
 class ExerciseViewSet(ReadOnlyModelViewSet):
     """Вьюсет для чтения объектов модели Exercise."""
 
-    queryset = Exercise.objects.select_related('type').filter(is_active=True)
+    queryset = Exercise.objects.filter(is_active=True)
     serializer_class = ExerciseSerializer
     filter_backends = (
         DjangoFilterBackend,

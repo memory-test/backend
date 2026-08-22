@@ -15,16 +15,19 @@ from users.models import Difficulty
 class ExerciseType(models.TextChoices):
     """Типы заданий."""
 
+    __empty__ = 'Выберите тип задания'
+
     CHOICE = 'choice', 'Выбор ответа(ов)'
     INPUT = 'input', 'Ручной ввод ответа'
     ORDERING = 'ordering', 'Сортировка'
     GROUPING = 'grouping', 'Группировка'
     MATCHING = 'matching', 'Сопоставление'
-    DRAWING = 'drawing', 'Графический вопрос'
+    DRAWING = 'drawing', 'Графическое задание'
+    OFFLINE = 'offline', 'Офлайн задание'
 
     @classmethod
     def get_max_length(cls) -> int:
-        return max(len(value) for value, _ in cls.choices)
+        return max(len(value) if value else 0 for value, _ in cls.choices)
 
 
 class Exercise(models.Model):
@@ -48,9 +51,34 @@ class Exercise(models.Model):
     question = models.TextField('Текст вопроса', max_length=QUESTION_LIMIT)
     image = models.ImageField('Изображение вопроса', blank=True)
     audio = models.FileField('Аудио-вопрос', blank=True)
-    is_offline = models.BooleanField('Оффлайн задание')
     is_active = models.BooleanField('Доступно к решению')
     created_at = models.DateTimeField('Дата создания', auto_now_add=True)
+
+    ANSWER_RELATIONS = {
+        value: f'{value}answers' for value, _ in ExerciseType.choices
+    }
+
+    def has_answers(self):
+        """Проверка на существование ответа(ов) к заданию."""
+        if self.type == 'offline':
+            return True
+        if not self.pk:
+            return False
+
+        relation_name = self.ANSWER_RELATIONS.get(self.type)
+        if relation_name is None:
+            return False
+        return getattr(self, relation_name).exists()
+
+    def clean(self):
+        super().clean()
+
+        if self.is_active and not self.has_answers():
+            raise ValidationError(
+                {
+                    'is_active': ('Нельзя активировать задание без ответа.'),
+                }
+            )
 
     class Meta:
         verbose_name = 'задание'
@@ -67,13 +95,19 @@ class Answer(models.Model):
     """Абстрактная модель для ответов на задания."""
 
     exercise = models.ForeignKey(
-        Exercise, on_delete=models.CASCADE, verbose_name='Задание'
+        Exercise,
+        on_delete=models.CASCADE,
+        verbose_name='Задание',
+        related_name='%(class)ss',
     )
 
     class Meta:
         abstract = True
         verbose_name = 'ответ'
         verbose_name_plural = 'Ответы'
+
+    def __str__(self):
+        return f'Ответ на задание №{self.exercise.id}'
 
 
 class TextImageMixin(models.Model):
@@ -82,20 +116,16 @@ class TextImageMixin(models.Model):
     text = models.TextField('Текст', max_length=ANSWER_LIMIT, blank=True)
     image = models.ImageField('Изображение', blank=True)
 
-    def clean(self):
-        super().clean()
-
-        if not self.text.strip() and not self.image:
-            raise ValidationError(
-                'Необходимо заполнить текст ответа или загрузить изображение.'
-            )
-
     class Meta:
         abstract = True
         constraints = [
             models.CheckConstraint(
                 condition=~Q(text='') | ~Q(image=''),
                 name='%(app_label)s_%(class)s_text_or_image_required',
+                violation_error_message=(
+                    'Необходимо заполнить текст ответа или загрузить '
+                    'изображение.'
+                ),
             )
         ]
 
@@ -109,9 +139,6 @@ class InputAnswer(Answer):
     expected_text = models.TextField(
         'Ожидаемый текст ответа', max_length=ANSWER_LIMIT
     )
-
-    def __str__(self):
-        return self.expected_text
 
 
 class ChoiceAnswer(TextImageMixin, Answer):
@@ -162,22 +189,6 @@ class MatchingAnswer(Answer):
     )
     second_image = models.ImageField('Второе изображение пары', blank=True)
 
-    def clean(self):
-        super().clean()
-
-        if (
-            not self.first_text.strip()
-            and not self.first_image
-            or not self.second_text.strip()
-            and not self.second_image
-        ):
-            raise ValidationError(
-                (
-                    'Необходимо заполнить текст ответа или загрузить'
-                    'изображение в каждом элементе пары.'
-                )
-            )
-
     class Meta(Answer.Meta):
         constraints = [
             models.CheckConstraint(
@@ -186,6 +197,10 @@ class MatchingAnswer(Answer):
                     & (~Q(second_text='') | ~Q(second_image=''))
                 ),
                 name='%(app_label)s_%(class)s_texts_or_images_required',
+                violation_error_message=(
+                    'Необходимо заполнить текст ответа или загрузить '
+                    'изображение в каждом элементе пары.'
+                ),
             )
         ]
 
@@ -193,12 +208,32 @@ class MatchingAnswer(Answer):
 class DrawingAnswer(TextImageMixin, Answer):
     """Ответы для графических заданий."""
 
-    trajectory = models.JSONField('Траектория (координаты)')
-    tolerance = models.SmallIntegerField('Допустимое отклонение')
     completion_only = models.BooleanField('Только фиксация выполнения')
+    trajectory = models.JSONField(
+        'Траектория (координаты)',
+        blank=True,
+        null=True,
+    )
+    tolerance = models.SmallIntegerField(
+        'Допустимое отклонение',
+        blank=True,
+        null=True,
+    )
     additional_image = models.ImageField(
         'Дополнительное изображение', blank=True
     )
 
     class Meta(TextImageMixin.Meta, Answer.Meta):
-        pass
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(completion_only=True)
+                    | (
+                        Q(trajectory__isnull=False)
+                        & Q(tolerance__isnull=False)
+                    )
+                ),
+                name='params_required_unless_completion_only',
+                violation_error_message='Необходимо заполнить поля ответа.',
+            ),
+        ]

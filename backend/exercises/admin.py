@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.contrib.admin.options import InlineModelAdmin
+from django.http import HttpRequest
 
 from exercises.models import (
     ChoiceAnswer,
@@ -13,48 +15,39 @@ from exercises.models import (
 
 
 class AnswerInline(admin.TabularInline):
-    extra = 1
+    extra = 0
     min_num = 1
     validate_min = True
 
 
-class ChoiceAnswerInline(admin.TabularInline):
+class ChoiceAnswerInline(AnswerInline):
     model = ChoiceAnswer
 
 
-class InputAnswerInline(admin.TabularInline):
+class InputAnswerInline(AnswerInline):
     model = InputAnswer
-    # max_num = 1
-    # validate_max = True
 
 
-class OrderingAnswerInline(admin.TabularInline):
+class OrderingAnswerInline(AnswerInline):
     model = OrderingAnswer
 
 
-class GroupingAnswerInline(admin.TabularInline):
+class GroupingAnswerInline(AnswerInline):
     model = GroupingAnswer
 
 
-class MatchingAnswerInline(admin.TabularInline):
+class MatchingAnswerInline(AnswerInline):
     model = MatchingAnswer
 
 
-class DrawingAnswerInline(admin.TabularInline):
+class DrawingAnswerInline(AnswerInline):
     model = DrawingAnswer
-
-
-@admin.register(ExerciseType)
-class ExerciseTypeAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description')
-    search_fields = ('name',)
-
-    fields = (('name', 'slug'), 'description')
 
 
 @admin.register(Exercise)
 class ExerciseAdmin(admin.ModelAdmin):
     list_display = (
+        'display_id',
         'title',
         'type',
         'difficulty',
@@ -62,19 +55,20 @@ class ExerciseAdmin(admin.ModelAdmin):
         'created_at',
     )
     list_editable = ('difficulty', 'is_active')
-    search_fields = ('title',)
+    search_fields = ('title', 'id')
     list_filter = ('type', 'difficulty', 'is_active', 'created_at')
 
-    readonly_fields = ('created_at',)
+    readonly_fields = ('display_id', 'created_at')
     fieldsets = (
         (
             'Oсновная информация',
             {
                 'fields': (
-                    'title',
+                    ('display_id', 'title'),
                     'description',
-                    'type',
-                    'difficulty',
+                    ('type', 'difficulty'),
+                    'question',
+                    ('image', 'audio'),
                 ),
             },
         ),
@@ -86,9 +80,15 @@ class ExerciseAdmin(admin.ModelAdmin):
         ),
     )
 
+    @admin.display(description='Номер', ordering='id')
+    def display_id(self, obj):
+        if obj.id:
+            return obj.id
+        return ''
+
     def get_inlines(
-        self, request, obj: Exercise | None = None
-    ) -> list[admin.TabularInline]:
+        self, request: HttpRequest, obj: Exercise | None = None
+    ) -> list[type[InlineModelAdmin]]:
         if obj is None:
             return []
 
