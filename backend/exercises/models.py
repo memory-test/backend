@@ -73,6 +73,8 @@ class Exercise(models.Model):
         relation_name = self.ANSWER_RELATIONS.get(self.type)
         if relation_name is None:
             return False
+        if self.type == 'input':
+            return hasattr(self, relation_name)
         return getattr(self, relation_name).exists()
 
     def clean(self):
