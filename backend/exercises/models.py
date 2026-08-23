@@ -9,7 +9,6 @@ from exercises.constants import (
     EXERCISE_TITLE_LENGTH,
     QUESTION_LIMIT,
 )
-from exercises.models_mixins import Answer, TextImageMixin
 from users.models import Difficulty
 
 
@@ -97,18 +96,64 @@ class Exercise(models.Model):
         return self.title
 
 
+class Answer(models.Model):
+    """Абстрактная модель для ответов на задания."""
+
+    exercise = models.ForeignKey(
+        Exercise,
+        on_delete=models.CASCADE,
+        verbose_name='Задание',
+        related_name='%(class)ss',
+    )
+
+    class Meta:
+        abstract = True
+        verbose_name = 'ответ'
+        verbose_name_plural = 'Ответы'
+
+    def __str__(self):
+        return f'Ответ на задание №{self.exercise.id}'
+
+
+class AnswerTextImageFields(Answer):
+    """Абстрактная модель ответов с полями "текст" и "изображение"."""
+
+    text = models.TextField('Текст', max_length=ANSWER_LIMIT, blank=True)
+    image = models.ImageField('Изображение', blank=True)
+
+    class Meta(Answer.Meta):
+        abstract = True
+        constraints = [
+            models.CheckConstraint(
+                condition=~Q(text='') | ~Q(image=''),
+                name='%(app_label)s_%(class)s_text_or_image_required',
+                violation_error_message=(
+                    'Необходимо заполнить текст ответа или загрузить '
+                    'изображение.'
+                ),
+            )
+        ]
+
+
+# Модели ответов необходимо именовать в соответсвии с их типом по схеме:
+# class TypeAnswer(Answer)
+
+
 class InputAnswer(Answer):
     """Ответы с ручным вводом."""
 
     exercise = models.OneToOneField(
-        Exercise, models.CASCADE, verbose_name='Задание'
+        Exercise,
+        models.CASCADE,
+        verbose_name='Задание',
+        related_name='inputanswers',
     )
     expected_text = models.TextField(
         'Ожидаемый текст ответа', max_length=ANSWER_LIMIT
     )
 
 
-class ChoiceAnswer(TextImageMixin, Answer):
+class ChoiceAnswer(AnswerTextImageFields):
     """Ответы с выбором варианта(ов)."""
 
     is_correct = models.BooleanField('Верный')
@@ -116,29 +161,29 @@ class ChoiceAnswer(TextImageMixin, Answer):
     def __str__(self):
         return super().__str__()
 
-    class Meta(TextImageMixin.Meta, Answer.Meta):
+    class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'is_correct',
         ]
 
 
-class OrderingAnswer(TextImageMixin, Answer):
+class OrderingAnswer(AnswerTextImageFields):
     """Ответы для заданий с распределением элементов."""
 
     position = models.SmallIntegerField('Порядок')
 
-    class Meta(TextImageMixin.Meta, Answer.Meta):
+    class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'position',
         ]
 
 
-class GroupingAnswer(TextImageMixin, Answer):
+class GroupingAnswer(AnswerTextImageFields):
     """Ответы для заданий на группировку."""
 
     group = models.CharField('Группа', max_length=ANSWERS_GROUP_LIMIT)
 
-    class Meta(TextImageMixin.Meta, Answer.Meta):
+    class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'group',
         ]
@@ -172,7 +217,7 @@ class MatchingAnswer(Answer):
         ]
 
 
-class DrawingAnswer(TextImageMixin, Answer):
+class DrawingAnswer(AnswerTextImageFields):
     """Ответы для графических заданий."""
 
     completion_only = models.BooleanField('Только фиксация выполнения')
@@ -190,8 +235,9 @@ class DrawingAnswer(TextImageMixin, Answer):
         'Дополнительное изображение', blank=True
     )
 
-    class Meta(TextImageMixin.Meta, Answer.Meta):
-        constraints = [
+    class Meta(AnswerTextImageFields.Meta):
+        constraints = AnswerTextImageFields.Meta.constraints
+        constraints.append(
             models.CheckConstraint(
                 condition=(
                     Q(completion_only=True)
@@ -203,4 +249,4 @@ class DrawingAnswer(TextImageMixin, Answer):
                 name='params_required_unless_completion_only',
                 violation_error_message='Необходимо заполнить поля ответа.',
             ),
-        ]
+        )
