@@ -5,10 +5,11 @@ from django.db.models import Q
 from exercises.constants import (
     ANSWER_LIMIT,
     ANSWERS_GROUP_LIMIT,
-    EX_DESC_LENGTH,
-    EX_TITLE_LENGTH,
+    EXERCISE_DESCRIPTION_LENGTH,
+    EXERCISE_TITLE_LENGTH,
     QUESTION_LIMIT,
 )
+from exercises.models_mixins import Answer, TextImageMixin
 from users.models import Difficulty
 
 
@@ -27,16 +28,21 @@ class ExerciseType(models.TextChoices):
 
     @classmethod
     def get_max_length(cls) -> int:
-        return max(len(value) if value else 0 for value, _ in cls.choices)
+        length_values = (
+            len(value) if value else 0 for value, _ in cls.choices
+        )
+        return max(length_values)
 
 
 class Exercise(models.Model):
     """Модель заданий."""
 
     title = models.CharField(
-        'Название', max_length=EX_TITLE_LENGTH, unique=True
+        'Название', max_length=EXERCISE_TITLE_LENGTH, unique=True
     )
-    description = models.TextField('Описание', max_length=EX_DESC_LENGTH)
+    description = models.TextField(
+        'Описание', max_length=EXERCISE_DESCRIPTION_LENGTH
+    )
     type = models.CharField(
         'Тип задания',
         choices=ExerciseType.choices,
@@ -89,45 +95,6 @@ class Exercise(models.Model):
 
     def __str__(self):
         return self.title
-
-
-class Answer(models.Model):
-    """Абстрактная модель для ответов на задания."""
-
-    exercise = models.ForeignKey(
-        Exercise,
-        on_delete=models.CASCADE,
-        verbose_name='Задание',
-        related_name='%(class)ss',
-    )
-
-    class Meta:
-        abstract = True
-        verbose_name = 'ответ'
-        verbose_name_plural = 'Ответы'
-
-    def __str__(self):
-        return f'Ответ на задание №{self.exercise.id}'
-
-
-class TextImageMixin(models.Model):
-    """Миксин с полями "текст" и "изображение" для моделей ответов."""
-
-    text = models.TextField('Текст', max_length=ANSWER_LIMIT, blank=True)
-    image = models.ImageField('Изображение', blank=True)
-
-    class Meta:
-        abstract = True
-        constraints = [
-            models.CheckConstraint(
-                condition=~Q(text='') | ~Q(image=''),
-                name='%(app_label)s_%(class)s_text_or_image_required',
-                violation_error_message=(
-                    'Необходимо заполнить текст ответа или загрузить '
-                    'изображение.'
-                ),
-            )
-        ]
 
 
 class InputAnswer(Answer):

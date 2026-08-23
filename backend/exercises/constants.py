@@ -1,7 +1,7 @@
-EX_DESC_LENGTH: int = 200
+EXERCISE_DESCRIPTION_LENGTH: int = 200
 """Ограничение длины полей "Описание"."""
 
-EX_TITLE_LENGTH: int = 50
+EXERCISE_TITLE_LENGTH: int = 50
 """Ограничение длины поля "Название" модели заданий."""
 
 QUESTION_LIMIT: int = 1000
