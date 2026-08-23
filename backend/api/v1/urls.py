@@ -8,7 +8,6 @@ from rest_framework_simplejwt.views import (
 from api.v1.views import (
     CodeRequestView,
     CodeVerifyView,
-    ExerciseTypeViewSet,
     ExerciseViewSet,
     MeView,
     PasswordResetConfirmView,
@@ -18,7 +17,6 @@ from api.v1.views import (
 
 router = DefaultRouter()
 router.register('exercises', ExerciseViewSet)
-router.register('exercises/types', ExerciseTypeViewSet)
 
 urlpatterns = [
     path('', include(router.urls)),
