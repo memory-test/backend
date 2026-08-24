@@ -33,6 +33,7 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
+    'djoser',
     'authentication.apps.AuthenticationConfig',
     'users.apps.UsersConfig',
     'exercises.apps.ExercisesConfig',
@@ -147,6 +148,28 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
+}
+
+# djoser: регистрация/профиль/сброс пароля/JWT из коробки.
+# Активация и сброс переопределены под 6-значные коды —
+# см. authentication/djoser.py (код-движок authentication/services.py)
+DJOSER = {
+    'LOGIN_FIELD': 'email',
+    'SEND_ACTIVATION_EMAIL': True,
+    'HIDE_USERS': True,
+    'SERIALIZERS': {
+        'user': 'authentication.djoser.CodeUserSerializer',
+        'current_user': 'authentication.djoser.CodeUserSerializer',
+        'user_create': 'authentication.djoser.CodeUserCreateSerializer',
+        'activation': 'authentication.djoser.CodeActivationSerializer',
+        'password_reset_confirm': (
+            'authentication.djoser.CodePasswordResetConfirmSerializer'
+        ),
+    },
+    'EMAIL': {
+        'activation': 'authentication.djoser.CodeActivationEmail',
+        'password_reset': 'authentication.djoser.CodePasswordResetEmail',
+    },
 }
 
 # Email: в DEBUG коды пишутся в консоль, в проде — через SMTP из окружения

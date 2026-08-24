@@ -11,6 +11,15 @@ from authentication.models import EmailCode
 User = get_user_model()
 
 API = '/api/v1'
+REGISTER = '/auth/users/'
+VERIFY = '/auth/verify/'
+CODE_REQUEST = '/auth/code/request/'
+RESEND_ACTIVATION = '/auth/users/resend_activation/'
+RESET = '/auth/users/reset_password/'
+RESET_CONFIRM = '/auth/users/reset_password_confirm/'
+TOKEN = '/auth/jwt/create/'
+REFRESH = '/auth/jwt/refresh/'
+ME = '/auth/users/me/'
 LOCMEM = 'django.core.mail.backends.locmem.EmailBackend'
 PWD = 'Str0ng-Passw0rd-2026'
 
@@ -33,10 +42,10 @@ class AuthTests(TestCase):
         return self.client.post(f'{API}{path}', data, format='json')
 
     def _register(self, email='alice@example.com', name='Alice', password=PWD):
-        return self._post(
-            '/auth/register/',
-            {'email': email, 'name': name, 'password': password},
-        )
+        payload = {'email': email, 'name': name}
+        if password is not None:
+            payload['password'] = password
+        return self._post(REGISTER, payload)
 
     def _register_and_code(self, **kwargs):
         resp = self._register(**kwargs)
@@ -48,7 +57,14 @@ class AuthTests(TestCase):
         user.save()
         return user
 
-    # --- регистрация ---------------------------------------------------
+    def _auth(self, email, password):
+        tok = self._post(TOKEN, {'email': email, 'password': password})
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f'Bearer {tok.data["access"]}'
+        )
+        return tok
+
+    # --- регистрация (djoser) ------------------------------------------
     def test_register_creates_inactive_user_and_sends_code(self):
         resp = self._register()
         self.assertEqual(resp.status_code, 201)
@@ -68,20 +84,41 @@ class AuthTests(TestCase):
         self.assertIn('password', resp.data)
 
     def test_register_without_password_is_simplified(self):
-        resp = self._post(
-            '/auth/register/',
-            {'email': 'bob@example.com', 'name': 'Bob'},
-        )
+        resp = self._register(password=None)
         self.assertEqual(resp.status_code, 201)
         self.assertFalse(
-            User.objects.get(email='bob@example.com').has_usable_password()
+            User.objects.get(email='alice@example.com').has_usable_password()
         )
+
+    def test_resend_activation_sends_new_code(self):
+        self._register()
+        mail.outbox = []
+        # имитируем прошедший кулдаун, иначе повторная отправка молча
+        # пропускается
+        EmailCode.objects.update(
+            created_at=timezone.now() - timedelta(minutes=2)
+        )
+        resp = self._post(RESEND_ACTIVATION, {'email': 'alice@example.com'})
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_resend_activation_for_unknown_email_is_silent(self):
+        resp = self._post(RESEND_ACTIVATION, {'email': 'noone@example.com'})
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_resend_activation_cooldown_is_silent(self):
+        """Кулдаун не роняет эндпоинт djoser — код просто не отправляется."""
+        self._register()
+        resp = self._post(RESEND_ACTIVATION, {'email': 'alice@example.com'})
+        self.assertEqual(resp.status_code, 204)
+        self.assertEqual(len(mail.outbox), 1)
 
     # --- подтверждение кода -------------------------------------------
     def test_verify_registration_activates_and_returns_jwt(self):
         _, code = self._register_and_code()
         resp = self._post(
-            '/auth/verify/',
+            VERIFY,
             {
                 'email': 'alice@example.com',
                 'code': code,
@@ -96,7 +133,7 @@ class AuthTests(TestCase):
     def test_verify_wrong_code(self):
         self._register()
         resp = self._post(
-            '/auth/verify/',
+            VERIFY,
             {
                 'email': 'alice@example.com',
                 'code': '000000',
@@ -108,7 +145,7 @@ class AuthTests(TestCase):
     def test_verify_reuse_code_rejected(self):
         _, code = self._register_and_code()
         first = self._post(
-            '/auth/verify/',
+            VERIFY,
             {
                 'email': 'alice@example.com',
                 'code': code,
@@ -117,7 +154,7 @@ class AuthTests(TestCase):
         )
         self.assertEqual(first.status_code, 200)
         second = self._post(
-            '/auth/verify/',
+            VERIFY,
             {
                 'email': 'alice@example.com',
                 'code': code,
@@ -134,7 +171,7 @@ class AuthTests(TestCase):
         code_obj.expires_at = timezone.now() - timedelta(minutes=1)
         code_obj.save()
         resp = self._post(
-            '/auth/verify/',
+            VERIFY,
             {
                 'email': 'alice@example.com',
                 'code': code,
@@ -145,13 +182,10 @@ class AuthTests(TestCase):
 
     def test_code_login_returns_jwt(self):
         self._active_user(email='frank@example.com')
-        self._post(
-            '/auth/code/request/',
-            {'email': 'frank@example.com', 'purpose': 'login'},
-        )
+        self._post(CODE_REQUEST, {'email': 'frank@example.com'})
         code = last_code()
         resp = self._post(
-            '/auth/verify/',
+            VERIFY,
             {
                 'email': 'frank@example.com',
                 'code': code,
@@ -161,11 +195,11 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn('access', resp.data)
 
-    # --- вход по паролю -----------------------------------------------
+    # --- вход по паролю (djoser jwt) -----------------------------------
     def test_token_login_by_password(self):
         self._active_user()
         resp = self._post(
-            '/token/', {'email': 'carol@example.com', 'password': PWD}
+            TOKEN, {'email': 'carol@example.com', 'password': PWD}
         )
         self.assertEqual(resp.status_code, 200)
         self.assertIn('access', resp.data)
@@ -173,78 +207,114 @@ class AuthTests(TestCase):
     def test_token_login_wrong_password(self):
         self._active_user()
         resp = self._post(
-            '/token/',
+            TOKEN,
             {'email': 'carol@example.com', 'password': 'wrong'},
         )
         self.assertEqual(resp.status_code, 401)
 
     def test_token_refresh(self):
         self._active_user(email='gina@example.com')
-        tok = self._post(
-            '/token/', {'email': 'gina@example.com', 'password': PWD}
-        )
-        resp = self._post('/token/refresh/', {'refresh': tok.data['refresh']})
+        tok = self._post(TOKEN, {'email': 'gina@example.com', 'password': PWD})
+        resp = self._post(REFRESH, {'refresh': tok.data['refresh']})
         self.assertEqual(resp.status_code, 200)
         self.assertIn('access', resp.data)
 
-    # --- сброс пароля --------------------------------------------------
+    # --- сброс пароля (djoser + код) -----------------------------------
     def test_password_reset_flow(self):
         self._active_user(email='dave@example.com')
-        resp = self._post(
-            '/auth/password/reset/', {'email': 'dave@example.com'}
-        )
-        self.assertEqual(resp.status_code, 200)
+        resp = self._post(RESET, {'email': 'dave@example.com'})
+        self.assertEqual(resp.status_code, 204)
         code = last_code()
         new_pwd = 'BrandNew-Passw0rd-99'
         resp = self._post(
-            '/auth/password/reset/confirm/',
+            RESET_CONFIRM,
             {
                 'email': 'dave@example.com',
                 'code': code,
                 'new_password': new_pwd,
             },
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 204)
         resp = self._post(
-            '/token/', {'email': 'dave@example.com', 'password': new_pwd}
+            TOKEN, {'email': 'dave@example.com', 'password': new_pwd}
         )
         self.assertEqual(resp.status_code, 200)
         self.assertIn('access', resp.data)
 
     def test_password_reset_unknown_email_is_generic(self):
-        resp = self._post(
-            '/auth/password/reset/', {'email': 'noone@example.com'}
-        )
-        self.assertEqual(resp.status_code, 200)
+        resp = self._post(RESET, {'email': 'noone@example.com'})
+        self.assertEqual(resp.status_code, 204)
         self.assertEqual(len(mail.outbox), 0)
+
+    def test_password_reset_confirm_weak_password_keeps_code(self):
+        """Слабый пароль не «сжигает» код: проверка идёт до расходования."""
+        self._active_user(email='dave@example.com')
+        self._post(RESET, {'email': 'dave@example.com'})
+        code = last_code()
+        resp = self._post(
+            RESET_CONFIRM,
+            {
+                'email': 'dave@example.com',
+                'code': code,
+                'new_password': '123',
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn('new_password', resp.data)
+        resp = self._post(
+            RESET_CONFIRM,
+            {
+                'email': 'dave@example.com',
+                'code': code,
+                'new_password': 'BrandNew-Passw0rd-99',
+            },
+        )
+        self.assertEqual(resp.status_code, 204)
+
+    def test_password_reset_blacklists_old_tokens(self):
+        self._active_user(email='dave@example.com')
+        tok = self._post(TOKEN, {'email': 'dave@example.com', 'password': PWD})
+        self._post(RESET, {'email': 'dave@example.com'})
+        code = last_code()
+        resp = self._post(
+            RESET_CONFIRM,
+            {
+                'email': 'dave@example.com',
+                'code': code,
+                'new_password': 'BrandNew-Passw0rd-99',
+            },
+        )
+        self.assertEqual(resp.status_code, 204)
+        refreshed = self._post(REFRESH, {'refresh': tok.data['refresh']})
+        self.assertEqual(refreshed.status_code, 401)
 
     # --- рейт-лимиты / анти-enumeration -------------------------------
     def test_code_request_cooldown(self):
         self._active_user(email='eve@example.com')
-        first = self._post(
-            '/auth/code/request/',
-            {'email': 'eve@example.com', 'purpose': 'login'},
-        )
+        first = self._post(CODE_REQUEST, {'email': 'eve@example.com'})
         self.assertEqual(first.status_code, 200)
-        second = self._post(
-            '/auth/code/request/',
-            {'email': 'eve@example.com', 'purpose': 'login'},
-        )
+        second = self._post(CODE_REQUEST, {'email': 'eve@example.com'})
         self.assertEqual(second.status_code, 429)
 
-    # --- профиль текущего пользователя --------------------------------
+    # --- профиль текущего пользователя (djoser me) ---------------------
     def test_me_requires_auth(self):
-        resp = self.client.get(f'{API}/users/me/')
+        resp = self.client.get(f'{API}{ME}')
         self.assertEqual(resp.status_code, 401)
 
     def test_me_returns_profile(self):
         self._active_user()
-        tok = self._post(
-            '/token/', {'email': 'carol@example.com', 'password': PWD}
-        )
-        self.client.credentials(
-            HTTP_AUTHORIZATION=f'Bearer {tok.data["access"]}'
-        )
-        resp = self.client.get(f'{API}/users/me/')
+        self._auth('carol@example.com', PWD)
+        resp = self.client.get(f'{API}{ME}')
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data['email'], 'carol@example.com')
+
+    def test_me_role_is_read_only(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+        resp = self.client.patch(
+            f'{API}{ME}', {'role': 'admin'}, format='json'
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(
+            User.objects.get(email='carol@example.com').role, 'user'
+        )
