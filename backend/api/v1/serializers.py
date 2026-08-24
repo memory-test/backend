@@ -21,7 +21,6 @@ class ExerciseSerializer(serializers.ModelSerializer):
             'description',
             'type',
             'difficulty',
-            'config',
             'is_active',
             'created_at',
         )
