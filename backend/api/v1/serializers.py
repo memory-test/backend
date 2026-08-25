@@ -54,10 +54,7 @@ class ExerciseSessionSerializer(serializers.Serializer):
 
 
 class HistoryListSerializer(serializers.ModelSerializer):
-    """
-    Список истории прохождения упражнений (краткая информация).
-    GET /api/progress/history/
-    """
+    """Список краткой истории прохождения упражнений."""
     exercise_title = serializers.CharField(
         source='exercise.title',
         read_only=True
@@ -85,9 +82,7 @@ class HistoryListSerializer(serializers.ModelSerializer):
 
 
 class AnswerDetailSerializer(serializers.ModelSerializer):
-    """
-    Детальный просмотр ответа пользователя.
-    """
+    """Детальный просмотр ответа пользователя."""
     question_text = serializers.SerializerMethodField()
     user_answer = serializers.SerializerMethodField()
     correct_answer = serializers.SerializerMethodField()
@@ -117,10 +112,7 @@ class AnswerDetailSerializer(serializers.ModelSerializer):
 
 
 class HistoryDetailSerializer(serializers.ModelSerializer):
-    """
-    Детальный просмотр прохождения упражнения (с ответами).
-    GET /api/progress/history/<id>/
-    """
+    """Детальный просмотр прохождения упражнения (с ответами)."""
     exercise_title = serializers.CharField(
         source='exercise.title',
         read_only=True
