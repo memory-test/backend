@@ -1,0 +1,269 @@
+{
+  "info": {
+    "name": "Тренажёр памяти — Авторизация",
+    "_postman_id": "a1b2c3d4-0002-4000-8000-000000000002",
+    "description": "Коллекция для проверки авторизации бэкенда (Django + DRF + djoser + SimpleJWT).\n\nБазовый URL и данные — в переменных коллекции (вкладка Variables).\n\nРегистрация, сброс пароля и профиль — эндпоинты djoser (/auth/users/...),\nвход по одноразовому коду — собственные (/auth/code/request/, /auth/verify/).\n\nКод подтверждения при DEBUG=True печатается в терминал `runserver`.\nПосле запроса «Регистрация»/«Запрос кода» скопируйте 6-значный код из терминала\nи вставьте его в переменную `code` (или в тело запроса verify).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://127.0.0.1:8000/api/v1" },
+    { "key": "email", "value": "tester@example.com" },
+    { "key": "name", "value": "Tester" },
+    { "key": "password", "value": "Str0ng-Passw0rd-2026" },
+    { "key": "new_password", "value": "BrandNew-Passw0rd-99" },
+    { "key": "code", "value": "" },
+    { "key": "access_token", "value": "" },
+    { "key": "refresh_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Регистрация / вход по коду",
+      "item": [
+        {
+          "name": "Регистрация",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Регистрация: код отправлен', () => pm.response.to.have.status(201));",
+                  "const body = JSON.parse(pm.request.body.raw || '{}');",
+                  "if (body.email) pm.collectionVariables.set('email', body.email);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"name\": \"{{name}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/",
+            "description": "djoser. Создаёт неактивного пользователя и отправляет код подтверждения.\npassword можно убрать — тогда это упрощённая регистрация (вход только по коду)."
+          }
+        },
+        {
+          "name": "Подтверждение кода / вход",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access) pm.collectionVariables.set('access_token', json.access);",
+                  "if (json.refresh) pm.collectionVariables.set('refresh_token', json.refresh);",
+                  "pm.test('JWT получен', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{code}}\",\n  \"purpose\": \"registration\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/verify/",
+            "description": "purpose: registration (активирует аккаунт) или login (вход по коду для активного).\nВозвращает {access, refresh}. access_token/refresh_token сохраняются в переменные автоматически."
+          }
+        },
+        {
+          "name": "Повторная отправка кода регистрации",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/resend_activation/",
+            "description": "djoser. Пересылает код регистрации незавершённой регистрации.\nВсегда 204 (анти-enumeration); кулдаун 60 сек — повторный код просто не отправится."
+          }
+        },
+        {
+          "name": "Запрос кода для входа",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/code/request/",
+            "description": "Отправляет код входа активному пользователю.\nКулдаун 60 сек (429), лимит 5 кодов в час."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Вход по паролю",
+      "item": [
+        {
+          "name": "Вход (получить токены)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access) pm.collectionVariables.set('access_token', json.access);",
+                  "if (json.refresh) pm.collectionVariables.set('refresh_token', json.refresh);",
+                  "pm.test('Вход выполнен', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/jwt/create/",
+            "description": "djoser (SimpleJWT TokenObtainPair). Возвращает {access, refresh}."
+          }
+        },
+        {
+          "name": "Обновить access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "if (json.access) pm.collectionVariables.set('access_token', json.access);",
+                  "pm.test('access обновлён', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/jwt/refresh/"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Сброс пароля",
+      "item": [
+        {
+          "name": "Запросить код сброса",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/reset_password/",
+            "description": "djoser. Отправляет код сброса (если аккаунт существует) — всегда 204.\nКод ищи в терминале."
+          }
+        },
+        {
+          "name": "Подтвердить сброс",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Пароль изменён', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{code}}\",\n  \"new_password\": \"{{new_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/reset_password_confirm/",
+            "description": "Проверяет код и ставит новый пароль. Все старые токены блокируются."
+          }
+        },
+        {
+          "name": "Сменить пароль (авторизован)",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{access_token}}", "type": "string" }
+              ]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{password}}\",\n  \"new_password\": \"{{new_password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/set_password/",
+            "description": "djoser. Смена пароля для авторизованного пользователя (нужен текущий пароль)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Профиль",
+      "item": [
+        {
+          "name": "Текущий пользователь",
+          "request": {
+            "method": "GET",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{access_token}}", "type": "string" }
+              ]
+            },
+            "header": [],
+            "url": "{{base_url}}/auth/users/me/",
+            "description": "djoser. Профиль текущего пользователя. Токен подставляется автоматически из access_token."
+          }
+        }
+      ]
+    }
+  ]
+}

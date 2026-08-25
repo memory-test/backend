@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin as Admin
 
 from .models import User
 
@@ -6,16 +7,21 @@ admin.site.empty_value_display = 'Не задано'
 
 
 @admin.register(User)
-class UserAdmin(admin.ModelAdmin):
+class UserAdmin(Admin):
     """Модель пользователя в админке."""
 
     list_display = (
-        'username',
         'email',
+        'name',
+        'role',
+        'is_active',
     )
-    list_filter = ('username',)
+    list_filter = (
+        'role',
+        'is_active',
+    )
     search_fields = (
-        'username',
         'email',
+        'name',
     )
-    ordering = ('username',)
+    ordering = ('-date_joined',)

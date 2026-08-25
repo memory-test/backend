@@ -1,9 +1,28 @@
 from rest_framework import serializers
 from progress.models import ExerciseSession, UserAnswer
 
+from authentication import services
+from authentication.constants import CODE_LENGTH
+from exercises.models import Exercise
+from users.constants import EMAIL_LENGTH
 
-# По названию класса это выглядит, как сериализатор модели Заданий,
-# хотя это не так. Скорее всего это для сессии упражения.
+
+class ExerciseSerializer(serializers.ModelSerializer):
+    """Сериализатор объектов класса Exercise."""
+
+    class Meta:
+        model = Exercise
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'is_active',
+            'created_at',
+        )
+
+
 class ExerciseSessionSerializer(serializers.Serializer):
     """Валидирует данные, которые присылвает фронтенд."""
 
@@ -130,34 +149,23 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class StartExerciseSerializer(serializers.Serializer):
-    """
-    Сериализатор для старта задания.
-    """
-    exercise_id = serializers.IntegerField()
-
-    def validate_exercise_id(self, value):
-        """Проверяем, что задание существует и активно."""
-        from backend.exercises.models import Exercise
-
-        if not Exercise.objects.filter(id=value, is_active=True).exists():
-            raise serializers.ValidationError(
-                'Задание не найдено или недоступно'
-            )
-        return value
+VERIFY_PURPOSES = (
+    (services.REGISTRATION, 'Регистрация'),
+    (services.LOGIN, 'Вход'),
+)
 
 
-class SubmitAnswerSerializer(serializers.Serializer):
-    """
-    Сериализатор для отправки ответа.
-    """
-    question_id = serializers.IntegerField(required=True, min_value=0)
-    answer = serializers.JSONField(required=True)
-    response_time = serializers.FloatField(required=True, min_value=0)
+class LoginCodeRequestSerializer(serializers.Serializer):
+    """Запрос кода для входа (регистрация и сброс — эндпоинты djoser)."""
+
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
 
 
-class FinishExerciseSerializer(serializers.Serializer):
-    """
-    Сериализатор для завершения сессии.
-    """
-    confirm = serializers.BooleanField(default=True)
+class CodeVerifySerializer(serializers.Serializer):
+    """Подтверждение кода (регистрация / вход) — возвращает JWT."""
+
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
+    code = serializers.CharField(
+        max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
+    )
+    purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)

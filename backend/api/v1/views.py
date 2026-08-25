@@ -1,38 +1,31 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status
+from rest_framework import filters, generics, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
-from api.v1.filters import ExerciseFilter
+from api.filters import ExerciseFilter
 from api.v1.serializers import (
+    CodeVerifySerializer,
     ExerciseSerializer,
     ExerciseSessionSerializer,
-    ExerciseTypeSerializer,
+    HistoryDetailSerializer,
+    HistoryListSerializer,
+    LoginCodeRequestSerializer,
 )
-from exercises.models import Exercise, ExerciseType
+from authentication import services
+from exercises.models import Exercise
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
-
-# Вьюсеты приложения exercises неаписаны на readonly, т.к. на данный момент нет
-# понимания будет ли админиистратор использовать фунционал api через фронт,
-# либо только использовать панель администратора.
-
-
-class ExerciseTypeViewSet(ReadOnlyModelViewSet):
-    """Вьюсет для чтения объектов модели ExerciseType."""
-
-    queryset = ExerciseType.objects.all()
-    serializer_class = ExerciseTypeSerializer
-    pagination_class = None
 
 
 class ExerciseViewSet(ReadOnlyModelViewSet):
     """Вьюсет для чтения объектов модели Exercise."""
 
-    queryset = Exercise.objects.select_related('type').filter(is_active=True)
+    queryset = Exercise.objects.filter(is_active=True)
     serializer_class = ExerciseSerializer
     filter_backends = (
         DjangoFilterBackend,
@@ -102,3 +95,80 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class HistoryListView(generics.ListAPIView):
+    """История прохождения. Список завершенных упражнений."""
+
+    serializer_class = HistoryListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            ExerciseSession.objects.filter(
+                user=self.request.user,
+                finished_at__isnull=False,
+            )
+            .select_related('exercise', 'exercise__type')
+            .order_by('-finished_at')
+        )
+
+
+class HistoryDetailView(generics.RetrieveAPIView):
+    """История прохождения. Детальный просмотр ответов."""
+
+    serializer_class = HistoryDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ExerciseSession.objects.filter(
+            user=self.request.user
+        ).prefetch_related('answers')
+
+
+ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
+
+_VERIFY_CODE_HANDLERS = {
+    services.REGISTRATION: services.confirm_registration,
+    services.LOGIN: services.login_with_code,
+}
+
+
+class LoginCodeRequestView(APIView):
+    """Запрос кода для входа — анти-enumeration ответ."""
+
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        serializer = LoginCodeRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            services.request_login_code(serializer.validated_data['email'])
+        except (services.CooldownError, services.RateLimitError) as exc:
+            return Response(
+                {'detail': str(exc)},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        return Response({'detail': ENUMERATION_MSG})
+
+
+class CodeVerifyView(APIView):
+    """Подтверждение кода (регистрация/вход) с выдачей JWT."""
+
+    permission_classes = (AllowAny,)
+
+    def post(self, request):
+        serializer = CodeVerifySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        purpose = serializer.validated_data['purpose']
+        handler = _VERIFY_CODE_HANDLERS[purpose]
+        try:
+            _, tokens = handler(
+                serializer.validated_data['email'],
+                serializer.validated_data['code'],
+            )
+        except services.CodeVerificationError as exc:
+            return Response(
+                {'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        return Response(tokens)

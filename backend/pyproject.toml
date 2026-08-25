@@ -7,6 +7,13 @@ dependencies = [
     "djangorestframework>=3.17.1",
     "django-filter>=26.1",
     "python-dotenv==1.0.1",
+    "gunicorn==25.3.0",
+    "django-cors-headers==4.6.0",
+    "psycopg2-binary==2.9.11",
+    "djangorestframework-simplejwt>=5.5.1",
+    "djoser>=2.3.4",
+    "pillow>=12.3.0",
+    "drf-spectacular>=0.30.0",
 ]
 
 [tool.ruff]
@@ -20,18 +27,19 @@ exclude = [
 ]
 
 [tool.ruff.lint]
-select = ["E", "W", "F"]
+select = ["E", "W", "F", "I"]
+
+[tool.ruff.isort]
+known-local-folder = [
+    ".",
+]
 
 [tool.ruff.lint.per-file-ignores]
 "**/settings.py" = ["E501"]
+"**/__init__.py" = ["F401"]
 
 [tool.ruff.format]
 quote-style = "single"
-
-[tool.isort]
-profile = "black"
-line_length = 79
-src_paths = ["backend"]
 
 [tool.mypy]
 plugins = ["mypy_django_plugin.main"]
@@ -41,14 +49,10 @@ django_settings_module = "backend.settings"
 
 [dependency-groups]
 dev = [
-    "isort>=8.0.1",
     "ruff>=0.16.0",
     "mypy>=2.3.0",
     "django-stubs>=6.0.7",
     "pre-commit>=4.6.1",
-]
-flake8 = [
-    "flake8>=7.3.0",
-    "flake8-docstrings>=1.7.0",
-    "flake8-isort>=7.0.0",
+    "djangorestframework-stubs>=3.18.0",
+    "django-filter-stubs>=0.1.3",
 ]

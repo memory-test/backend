@@ -144,8 +144,12 @@ dmypy.json
 .history/
 
 .mypy_cache
+.ruff_cache
 
 # папки со статикой и медиа
 media/
 sent_emails/
+
+# CodeGraph index
+.codegraph/
 
