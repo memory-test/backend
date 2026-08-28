@@ -1,6 +1,6 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status
+from rest_framework import filters, generics, status
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +12,8 @@ from api.v1.serializers import (
     CodeVerifySerializer,
     ExerciseSerializer,
     ExerciseSessionSerializer,
+    HistoryDetailSerializer,
+    HistoryListSerializer,
     LoginCodeRequestSerializer,
 )
 from authentication import services
@@ -93,6 +95,35 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
             },
             status=status.HTTP_201_CREATED,
         )
+
+
+class HistoryListView(generics.ListAPIView):
+    """История прохождения. Список завершенных упражнений."""
+
+    serializer_class = HistoryListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            ExerciseSession.objects.filter(
+                user=self.request.user,
+                finished_at__isnull=False,
+            )
+            .select_related('exercise', 'exercise__type')
+            .order_by('-finished_at')
+        )
+
+
+class HistoryDetailView(generics.RetrieveAPIView):
+    """История прохождения. Детальный просмотр ответов."""
+
+    serializer_class = HistoryDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ExerciseSession.objects.filter(
+            user=self.request.user
+        ).prefetch_related('answers')
 
 
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
