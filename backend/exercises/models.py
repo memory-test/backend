@@ -160,9 +160,6 @@ class ChoiceAnswer(AnswerTextImageFields):
 
     is_correct = models.BooleanField('Верный')
 
-    def __str__(self):
-        return super().__str__()
-
     class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'is_correct',

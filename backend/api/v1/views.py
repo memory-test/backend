@@ -32,7 +32,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     )
     filterset_class = ExerciseFilter
     search_fields = ('title',)
-    ordering_fields = ('title', 'type__name', 'difficulty', 'created_at')
+    ordering_fields = ('title', 'type', 'difficulty', 'created_at')
 
     def get_serializer_class(self):
         if self.action == 'pass_exercise':
