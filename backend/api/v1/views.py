@@ -1,48 +1,63 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status
+from django.shortcuts import get_object_or_404
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from api.filters import ExerciseFilter
 from api.v1.serializers import (
     CodeRequestSerializer,
     CodeVerifySerializer,
     ExerciseSerializer,
+    ResultExerciseSerializer,
     ExerciseSessionSerializer,
     PasswordResetConfirmSerializer,
     PasswordResetSerializer,
     RegisterSerializer,
     UserSerializer,
 )
+from backend.exercises.models import Exercise
+from backend.exercises.services import ChooseExerciseService
+from backend.progress.models import ExerciseSession, UserAnswer
+from .registry import EXERCISE_REGISTRY
 from authentication import services
-from exercises.models import Exercise
+from backend.exercises.models import Exercise
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
 
 
-class ExerciseViewSet(ReadOnlyModelViewSet):
-    """Вьюсет для чтения объектов модели Exercise."""
+class ExerciseView(viewsets.ViewSet):
+    """Контроллер для выполнения задания"""
 
-    queryset = Exercise.objects.filter(is_active=True)
-    serializer_class = ExerciseSerializer
-    filter_backends = (
-        DjangoFilterBackend,
-        filters.SearchFilter,
-        filters.OrderingFilter,
-    )
-    filterset_class = ExerciseFilter
-    search_fields = ('title',)
-    ordering_fields = ('title', 'type__name', 'difficulty', 'created_at')
+    def _get_config(self, exercise_id: int) -> ExerciseConfig:
+        """Вспомогательный метод для получения конфигурации по id задания."""
+        exercise_type = get_object_or_404(
+            Exercise.objects.values('type'),
+            id=exercise_id
+        )['type']
 
-    def get_serializer_class(self):
-        if self.action == 'pass_exercise':
-            return ExerciseSessionSerializer
-        return super().get_serializer_class()
+        config = EXERCISE_REGISTRY.get(exercise_type)
+        if not config:
+            raise status.HTTP_400_BAD_REQUEST
+        return config
+
+    def list(self, request):
+        queryset = Exercise.objects.filter(is_active=True)
+        serializer = ExerciseSerializer(queryset, many=True)
+        return Response(serializer.data)
+
+    def retrieve(self, request, pk=None):
+        """
+        Отдает структуру задания.
+        """
+        config = self._get_config(pk)
+        exercise = config.service.get_exercise(pk)
+        serializer = config.read_serializer(exercise, context={'exercise': exercise})
+        return Response(serializer.data)
 
     @action(
         detail=True,
@@ -51,36 +66,37 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated],
     )
     def pass_exercise(self, request, pk=None):
-        exercise = self.get_object()
-        serializer = self.get_serializer(data=request.data)
+        """
+        Получает результаты прохождения задания
+        и в зависимости от его типа валидирует данные
+        и проверяет ответ, также сохраняет сессию прохождения задания
+        и ответы пользователя.
+        :returns ResultExerciseSerializer
+        """
+
+        config = self._get_config(pk)
+        exercise = config.service.get_exercise(pk)
+        serializer = config.write_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        clean_data: dict = serializer.validated_data
-        task_result: dict = check_answer(
-            exercise, clean_data.get('answer_data')
-        )
-        # здесь получаем количество попыток пользователя до этой сессии.
-        sessions_count: int = (
-            ExerciseSession.objects.filter(
-                user=request.user, exercise_id=exercise
-            ).count()
-            + 1
+        clean_data = serializer.validated_data
+        task_result = config.service.check_answer(
+            exercise, clean_data
         )
 
-        # будет сохранять в бд 2 записи, иначе ничего.
-        # Также чуть позже настроим зедсь логирвоние ошибок,
-        # если вдруг записи не сохраняться.
+        # TODO: добавить обработку ошибок.
         with transaction.atomic():
             session = ExerciseSession.objects.create(
                 user=request.user,
                 exercise_id=exercise,
-                difficulty=task_result.get('difficulty'),
+                difficulty=exercise.difficulty,
                 started_at=clean_data.get('started_at'),
                 finished_at=clean_data.get('finished_at'),
                 duration_seconds=clean_data.get('duration_seconds'),
-                success=task_result.get('success'),
-                score=task_result.get('score'),
-                attempts_count=sessions_count,
+                success=task_result.success,
+                score=task_result.score
             )
+            # TODO: в модели UserAnswer реализовать логику
+            #  сохранения ответов пользователя (не в JSON).
             UserAnswer.objects.create(
                 session=session,
                 answer_data=clean_data.get('answer_data'),
@@ -88,16 +104,8 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 response_time=float(clean_data.get('duration_seconds')),
             )
 
-        return Response(
-            {
-                'status': 'success',
-                'session_id': session.id,
-                'score': session.score,
-                'success': session.success,
-                'attempts_count': session.attempts_count,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        # TODO: дописать task_result
+        return Response(ResultExerciseSerializer(task_result))
 
 
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'

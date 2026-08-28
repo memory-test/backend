@@ -5,7 +5,7 @@ from rest_framework import serializers
 from authentication import services
 from authentication.constants import CODE_LENGTH
 from authentication.models import EmailCode
-from exercises.models import Exercise
+from exercises.models import Exercise, ChoiceAnswer
 from users.constants import EMAIL_LENGTH, NAME_LENGTH
 from users.models import User
 
@@ -25,6 +25,42 @@ class ExerciseSerializer(serializers.ModelSerializer):
             'created_at',
         )
 
+class ChoiceAnswerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ChoiceAnswer
+        fields = ['id', 'text', 'image']
+
+class ChoiceExerciseSerializer(serializers.ModelSerializer):
+    options = ChoiceAnswerSerializer(many=True, read_only=True, source='choiceanswers')
+
+    class Meta:
+        model = Exercise
+        fields = ['id', 'title', 'description', 'question', 'image', 'audio', 'options']
+
+
+class ChoiceCheckSerializer(serializers.Serializer):
+    answers_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False
+    )
+
+    def validate(self, attrs):
+        exercise = self.context.get('exercise')
+        user_answers_ids = list(set(attrs.get('answers_ids')))
+        allowed_ids = [answer.id for answer in exercise.choiceanswers.all()]
+        for answer_id in user_answers_ids:
+            if answer_id not in allowed_ids:
+                raise serializers.ValidationError(
+                    {'answers_ids': f'Вариант ответа с ID {answer_id} не принадлежит данному заданию.'}
+                )
+        attrs['answers_ids'] = user_answers_ids
+        return attrs
+
+
+
+class ResultExerciseSerializer(serializers.Serializer):
+    score = serializers.FloatField(required=True)
+    success = serializers.BooleanField(required=True)
 
 class ExerciseSessionSerializer(serializers.Serializer):
     """Валидирует данные, которые присылвает фронтенд."""
