@@ -3,6 +3,7 @@ from rest_framework import serializers
 from authentication import services
 from authentication.constants import CODE_LENGTH
 from exercises.models import Exercise
+from progress.models import ExerciseSession, UserAnswer
 from users.constants import EMAIL_LENGTH
 
 
@@ -50,6 +51,93 @@ class ExerciseSessionSerializer(serializers.Serializer):
                 'Продолжительность не может быть отрицательной.'
             )
         return value
+
+
+class HistoryListSerializer(serializers.ModelSerializer):
+    """Список краткой истории прохождения упражнений."""
+
+    exercise_title = serializers.CharField(
+        source='exercise.title', read_only=True
+    )
+    exercise_type = serializers.CharField(
+        source='exercise.type.name', read_only=True
+    )
+
+    class Meta:
+        model = ExerciseSession
+        fields = [
+            'id',
+            'exercise_title',
+            'exercise_type',
+            'difficulty',
+            'score',
+            'success',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+            'attempts_count',
+        ]
+        read_only_fields = fields
+
+
+class AnswerDetailSerializer(serializers.ModelSerializer):
+    """Детальный просмотр ответа пользователя."""
+
+    question_text = serializers.SerializerMethodField()
+    user_answer = serializers.SerializerMethodField()
+    correct_answer = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserAnswer
+        fields = [
+            'id',
+            'question_text',
+            'user_answer',
+            'correct_answer',
+            'is_correct',
+            'response_time',
+        ]
+
+    def get_question_text(self, obj):
+        """Извлекаем текст вопроса из JSON."""
+        return obj.answer_data.get('question_text', '')
+
+    def get_user_answer(self, obj):
+        """Извлекаем ответ пользователя из JSON."""
+        return obj.answer_data.get('user_answer')
+
+    def get_correct_answer(self, obj):
+        """Извлекаем правильный ответ из JSON."""
+        return obj.answer_data.get('correct_answer')
+
+
+class HistoryDetailSerializer(serializers.ModelSerializer):
+    """Детальный просмотр прохождения упражнения (с ответами)."""
+
+    exercise_title = serializers.CharField(
+        source='exercise.title', read_only=True
+    )
+    exercise_type = serializers.CharField(
+        source='exercise.type.name', read_only=True
+    )
+    answers = AnswerDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ExerciseSession
+        fields = [
+            'id',
+            'exercise_title',
+            'exercise_type',
+            'difficulty',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+            'score',
+            'success',
+            'attempts_count',
+            'answers',
+        ]
+        read_only_fields = fields
 
 
 VERIFY_PURPOSES = (
