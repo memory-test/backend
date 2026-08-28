@@ -13,7 +13,6 @@ from exercises.models import (
 )
 from progress.models import ExerciseSession, UserAnswer
 from users.constants import EMAIL_LENGTH
-from users.models import Difficulty
 
 
 class AnswerBaseSerializer(serializers.ModelSerializer):
@@ -74,11 +73,28 @@ class DrawingAnswerSerializer(AnswerBaseSerializer):
         )
 
 
-class ExerciseSerializer(serializers.ModelSerializer):
-    """Сериализатор объектов класса Exercise."""
+class ExerciseShortSerializer(serializers.ModelSerializer):
+    """Сериализатор краткого представления объектов класса Exercise.
 
-    type = serializers.ChoiceField(ExerciseType.choices)
-    difficulty = serializers.ChoiceField(Difficulty.choices)
+    Для использования при отображении списка заданий.
+    """
+
+    class Meta:
+        model = Exercise
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'is_active',
+            'created_at',
+        )
+
+
+class ExerciseFullSerializer(serializers.ModelSerializer):
+    """Сериализатор полного представления объектов класса Exercise."""
+
     answers_info = serializers.SerializerMethodField(read_only=True)
 
     ANSWER_SERIALIZERS = {
