@@ -92,7 +92,7 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
         )
 
 
-class ExerciseFullSerializer(serializers.ModelSerializer):
+class ExerciseFullSerializer(ExerciseShortSerializer):
     """Сериализатор полного представления объектов класса Exercise."""
 
     answers_info = serializers.SerializerMethodField(read_only=True)
@@ -118,8 +118,7 @@ class ExerciseFullSerializer(serializers.ModelSerializer):
             context=self.context,
         ).data
 
-    class Meta:
-        model = Exercise
+    class Meta(ExerciseShortSerializer.Meta):
         fields = (
             'id',
             'title',
