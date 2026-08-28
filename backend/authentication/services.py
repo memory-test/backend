@@ -1,8 +1,11 @@
 """Сервисный слой авторизации.
 
-Регистрация, вход по паролю и одноразовому коду, восстановление пароля.
-Хранение и проверка одноразовых кодов (модель EmailCode), кулдаун и
-лимиты отправок, выдача и отзыв JWT.
+Вход по паролю и одноразовому коду, подтверждение регистрации,
+восстановление пароля. Хранение и проверка одноразовых кодов
+(модель EmailCode), кулдаун и лимиты отправок, выдача и отзыв JWT.
+
+Регистрацию, сброс пароля и профиль по HTTP делает djoser —
+см. authentication.djoser, который вызывает issue_code/consume_code.
 """
 
 import secrets
@@ -68,7 +71,7 @@ def _send_code_email(email: str, code: str, purpose: str) -> None:
     )
 
 
-def _issue_code(email: str, purpose: str) -> None:
+def issue_code(email: str, purpose: str) -> None:
     """Создаёт новый код для (email, purpose) и отправляет его на почту.
 
     Общая точка входа для всех флоу: проверяет кулдаун и лимит отправок,
@@ -104,7 +107,7 @@ def _issue_code(email: str, purpose: str) -> None:
     _send_code_email(email, code, purpose)
 
 
-def _consume_code(email: str, code: str, purpose: str) -> None:
+def consume_code(email: str, code: str, purpose: str) -> None:
     """Проверяет код для (email, purpose) и помечает его использованным.
 
     Поднимает CodeVerificationError при любой ошибке проверки
@@ -143,7 +146,7 @@ def _issue_tokens(user: User) -> dict:
     return {'access': str(refresh.access_token), 'refresh': str(refresh)}
 
 
-def _blacklist_user_tokens(user: User) -> None:
+def blacklist_user_tokens(user: User) -> None:
     """Блокирует все ранее выданные токены пользователя."""
     from rest_framework_simplejwt.token_blacklist.models import (
         BlacklistedToken,
@@ -154,39 +157,9 @@ def _blacklist_user_tokens(user: User) -> None:
         BlacklistedToken.objects.get_or_create(token=token)
 
 
-def start_registration(
-    email: str, name: str, password: str | None = None, birth_date=None
-) -> User:
-    """Создаёт неактивного пользователя и отправляет код подтверждения.
-
-    Если password не передан — регистрация упрощённая (пароль не задаётся,
-    вход в дальнейшем только по коду).
-    """
-    user = User(email=email, name=name, birth_date=birth_date, is_active=False)
-    if password:
-        user.set_password(password)
-    else:
-        user.set_unusable_password()
-    user.save()
-    _issue_code(email, REGISTRATION)
-    return user
-
-
-def resend_registration_code(email: str) -> None:
-    """Повторно отправляет код регистрации, если она не завершена.
-
-    Анти-enumeration: для несуществующего/уже активного пользователя
-    молча ничего не делает.
-    """
-    user = User.objects.filter(email=email).first()
-    if user is None or user.is_active:
-        return
-    _issue_code(email, REGISTRATION)
-
-
 def confirm_registration(email: str, code: str) -> tuple[User, dict]:
     """Подтверждает код регистрации, активирует пользователя, выдаёт JWT."""
-    _consume_code(email, code, REGISTRATION)
+    consume_code(email, code, REGISTRATION)
     user = User.objects.get(email=email)
     if not user.is_active:
         user.is_active = True
@@ -203,32 +176,11 @@ def request_login_code(email: str) -> None:
     user = User.objects.filter(email=email).first()
     if user is None or not user.is_active:
         return
-    _issue_code(email, LOGIN)
+    issue_code(email, LOGIN)
 
 
 def login_with_code(email: str, code: str) -> tuple[User, dict]:
     """Подтверждает код входа и выдаёт JWT."""
-    _consume_code(email, code, LOGIN)
+    consume_code(email, code, LOGIN)
     user = User.objects.get(email=email)
     return user, _issue_tokens(user)
-
-
-def start_password_reset(email: str) -> None:
-    """Отправляет код сброса пароля активному пользователю.
-
-    Анти-enumeration: для несуществующего/неактивного пользователя
-    молча ничего не делает.
-    """
-    user = User.objects.filter(email=email).first()
-    if user is None or not user.is_active:
-        return
-    _issue_code(email, PASSWORD_RESET)
-
-
-def confirm_password_reset(email: str, code: str, new_password: str) -> None:
-    """Проверяет код сброса, ставит новый пароль, блокирует старые токены."""
-    _consume_code(email, code, PASSWORD_RESET)
-    user = User.objects.get(email=email)
-    user.set_password(new_password)
-    user.save()
-    _blacklist_user_tokens(user)

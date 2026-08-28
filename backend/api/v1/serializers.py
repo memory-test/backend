@@ -1,13 +1,10 @@
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
 from authentication import services
 from authentication.constants import CODE_LENGTH
-from authentication.models import EmailCode
 from exercises.models import Exercise, ChoiceAnswer
-from users.constants import EMAIL_LENGTH, NAME_LENGTH
-from users.models import User
+from progress.models import ExerciseSession, UserAnswer
+from users.constants import EMAIL_LENGTH
 
 
 class ExerciseSerializer(serializers.ModelSerializer):
@@ -62,6 +59,8 @@ class ResultExerciseSerializer(serializers.Serializer):
     score = serializers.FloatField(required=True)
     success = serializers.BooleanField(required=True)
 
+# TODO: будет изменена модель,
+#  следовательно надо будет изменить сериализатор.
 class ExerciseSessionSerializer(serializers.Serializer):
     """Валидирует данные, которые присылвает фронтенд."""
 
@@ -92,7 +91,92 @@ class ExerciseSessionSerializer(serializers.Serializer):
         return value
 
 
-PASSWORD_STYLE = {'input_type': 'password'}
+class HistoryListSerializer(serializers.ModelSerializer):
+    """Список краткой истории прохождения упражнений."""
+
+    exercise_title = serializers.CharField(
+        source='exercise.title', read_only=True
+    )
+    exercise_type = serializers.CharField(
+        source='exercise.type.name', read_only=True
+    )
+
+    class Meta:
+        model = ExerciseSession
+        fields = [
+            'id',
+            'exercise_title',
+            'exercise_type',
+            'difficulty',
+            'score',
+            'success',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+            'attempts_count',
+        ]
+        read_only_fields = fields
+
+
+class AnswerDetailSerializer(serializers.ModelSerializer):
+    """Детальный просмотр ответа пользователя."""
+
+    question_text = serializers.SerializerMethodField()
+    user_answer = serializers.SerializerMethodField()
+    correct_answer = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserAnswer
+        fields = [
+            'id',
+            'question_text',
+            'user_answer',
+            'correct_answer',
+            'is_correct',
+            'response_time',
+        ]
+
+    def get_question_text(self, obj):
+        """Извлекаем текст вопроса из JSON."""
+        return obj.answer_data.get('question_text', '')
+
+    def get_user_answer(self, obj):
+        """Извлекаем ответ пользователя из JSON."""
+        return obj.answer_data.get('user_answer')
+
+    def get_correct_answer(self, obj):
+        """Извлекаем правильный ответ из JSON."""
+        return obj.answer_data.get('correct_answer')
+
+
+class HistoryDetailSerializer(serializers.ModelSerializer):
+    """Детальный просмотр прохождения упражнения (с ответами)."""
+
+    exercise_title = serializers.CharField(
+        source='exercise.title', read_only=True
+    )
+    exercise_type = serializers.CharField(
+        source='exercise.type.name', read_only=True
+    )
+    answers = AnswerDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ExerciseSession
+        fields = [
+            'id',
+            'exercise_title',
+            'exercise_type',
+            'difficulty',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+            'score',
+            'success',
+            'attempts_count',
+            'answers',
+        ]
+        read_only_fields = fields
+
 
 VERIFY_PURPOSES = (
     (services.REGISTRATION, 'Регистрация'),
@@ -100,43 +184,10 @@ VERIFY_PURPOSES = (
 )
 
 
-class RegisterSerializer(serializers.Serializer):
-    """Регистрация: email + имя, пароль опционален (упрощённая регистрация)."""
+class LoginCodeRequestSerializer(serializers.Serializer):
+    """Запрос кода для входа (регистрация и сброс — эндпоинты djoser)."""
 
     email = serializers.EmailField(max_length=EMAIL_LENGTH)
-    name = serializers.CharField(max_length=NAME_LENGTH)
-    password = serializers.CharField(
-        write_only=True,
-        required=False,
-        allow_blank=False,
-        trim_whitespace=False,
-        style=PASSWORD_STYLE,
-    )
-    birth_date = serializers.DateField(required=False)
-
-    def validate_email(self, value):
-        """Запрещает повторную регистрацию по уже занятому email."""
-        if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError(
-                'Пользователь с таким email уже существует.'
-            )
-        return value
-
-    def validate_password(self, value):
-        """Прогоняет пароль через настроенные AUTH_PASSWORD_VALIDATORS."""
-        if value:
-            try:
-                validate_password(value)
-            except DjangoValidationError as exc:
-                raise serializers.ValidationError(list(exc.messages))
-        return value
-
-
-class CodeRequestSerializer(serializers.Serializer):
-    """Запрос кода подтверждения."""
-
-    email = serializers.EmailField(max_length=EMAIL_LENGTH)
-    purpose = serializers.ChoiceField(choices=EmailCode.Purpose.choices)
 
 
 class CodeVerifySerializer(serializers.Serializer):
@@ -147,50 +198,3 @@ class CodeVerifySerializer(serializers.Serializer):
         max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
     )
     purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)
-
-
-class PasswordResetSerializer(serializers.Serializer):
-    """Запрос сброса пароля."""
-
-    email = serializers.EmailField(max_length=EMAIL_LENGTH)
-
-
-class PasswordResetConfirmSerializer(serializers.Serializer):
-    """Сброс пароля по коду из email."""
-
-    email = serializers.EmailField(max_length=EMAIL_LENGTH)
-    code = serializers.CharField(
-        max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
-    )
-    new_password = serializers.CharField(
-        write_only=True,
-        allow_blank=False,
-        trim_whitespace=False,
-        style=PASSWORD_STYLE,
-    )
-
-    def validate_new_password(self, value):
-        """Прогоняет новый пароль через AUTH_PASSWORD_VALIDATORS."""
-        try:
-            validate_password(value)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError(list(exc.messages))
-        return value
-
-
-class UserSerializer(serializers.ModelSerializer):
-    """Профиль пользователя."""
-
-    class Meta:
-        model = User
-        fields = (
-            'id',
-            'email',
-            'name',
-            'birth_date',
-            'current_difficulty',
-            'role',
-            'is_active',
-            'date_joined',
-        )
-        read_only_fields = fields

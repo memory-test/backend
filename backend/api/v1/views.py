@@ -1,31 +1,28 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, status, generics, viewsets
 from rest_framework.decorators import action
-from rest_framework.generics import RetrieveAPIView
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from api.filters import ExerciseFilter
 from api.v1.serializers import (
-    CodeRequestSerializer,
     CodeVerifySerializer,
     ExerciseSerializer,
     ResultExerciseSerializer,
     ExerciseSessionSerializer,
-    PasswordResetConfirmSerializer,
-    PasswordResetSerializer,
-    RegisterSerializer,
-    UserSerializer,
+    HistoryDetailSerializer,
+    HistoryListSerializer,
+    LoginCodeRequestSerializer,
 )
 from backend.exercises.models import Exercise
 from backend.exercises.services import ChooseExerciseService
 from backend.progress.models import ExerciseSession, UserAnswer
 from .registry import EXERCISE_REGISTRY
 from authentication import services
-from backend.exercises.models import Exercise
+from exercises.models import Exercise
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
 
@@ -108,13 +105,36 @@ class ExerciseView(viewsets.ViewSet):
         return Response(ResultExerciseSerializer(task_result))
 
 
-ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
+class HistoryListView(generics.ListAPIView):
+    """История прохождения. Список завершенных упражнений."""
 
-_REQUEST_CODE_HANDLERS = {
-    services.REGISTRATION: services.resend_registration_code,
-    services.LOGIN: services.request_login_code,
-    services.PASSWORD_RESET: services.start_password_reset,
-}
+    serializer_class = HistoryListSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            ExerciseSession.objects.filter(
+                user=self.request.user,
+                finished_at__isnull=False,
+            )
+            .select_related('exercise', 'exercise__type')
+            .order_by('-finished_at')
+        )
+
+
+class HistoryDetailView(generics.RetrieveAPIView):
+    """История прохождения. Детальный просмотр ответов."""
+
+    serializer_class = HistoryDetailSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ExerciseSession.objects.filter(
+            user=self.request.user
+        ).prefetch_related('answers')
+
+
+ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
 
 _VERIFY_CODE_HANDLERS = {
     services.REGISTRATION: services.confirm_registration,
@@ -122,42 +142,16 @@ _VERIFY_CODE_HANDLERS = {
 }
 
 
-class RegisterView(APIView):
-    """Регистрация пользователя и отправка кода подтверждения."""
+class LoginCodeRequestView(APIView):
+    """Запрос кода для входа — анти-enumeration ответ."""
 
     permission_classes = (AllowAny,)
 
     def post(self, request):
-        serializer = RegisterSerializer(data=request.data)
+        serializer = LoginCodeRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            user = services.start_registration(**serializer.validated_data)
-        except (services.CooldownError, services.RateLimitError) as exc:
-            return Response(
-                {'detail': str(exc)},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
-        return Response(
-            {
-                'detail': 'Код подтверждения отправлен на email.',
-                'email': user.email,
-            },
-            status=status.HTTP_201_CREATED,
-        )
-
-
-class CodeRequestView(APIView):
-    """Запрос кода (регистрация/вход/сброс) — анти-enumeration ответ."""
-
-    permission_classes = (AllowAny,)
-
-    def post(self, request):
-        serializer = CodeRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        purpose = serializer.validated_data['purpose']
-        handler = _REQUEST_CODE_HANDLERS[purpose]
-        try:
-            handler(serializer.validated_data['email'])
+            services.request_login_code(serializer.validated_data['email'])
         except (services.CooldownError, services.RateLimitError) as exc:
             return Response(
                 {'detail': str(exc)},
@@ -186,52 +180,3 @@ class CodeVerifyView(APIView):
                 {'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST
             )
         return Response(tokens)
-
-
-class PasswordResetView(APIView):
-    """Запрос кода для сброса пароля — анти-enumeration ответ."""
-
-    permission_classes = (AllowAny,)
-
-    def post(self, request):
-        serializer = PasswordResetSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        try:
-            services.start_password_reset(serializer.validated_data['email'])
-        except (services.CooldownError, services.RateLimitError) as exc:
-            return Response(
-                {'detail': str(exc)},
-                status=status.HTTP_429_TOO_MANY_REQUESTS,
-            )
-        return Response({'detail': ENUMERATION_MSG})
-
-
-class PasswordResetConfirmView(APIView):
-    """Сброс пароля по коду из email."""
-
-    permission_classes = (AllowAny,)
-
-    def post(self, request):
-        serializer = PasswordResetConfirmSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        try:
-            services.confirm_password_reset(
-                serializer.validated_data['email'],
-                serializer.validated_data['code'],
-                serializer.validated_data['new_password'],
-            )
-        except services.CodeVerificationError as exc:
-            return Response(
-                {'detail': str(exc)}, status=status.HTTP_400_BAD_REQUEST
-            )
-        return Response({'detail': 'Пароль успешно изменён.'})
-
-
-class MeView(RetrieveAPIView):
-    """Профиль текущего пользователя."""
-
-    serializer_class = UserSerializer
-    permission_classes = (IsAuthenticated,)
-
-    def get_object(self):
-        return self.request.user
