@@ -10,8 +10,9 @@ from rest_framework.viewsets import ReadOnlyModelViewSet
 from api.filters import ExerciseFilter
 from api.v1.serializers import (
     CodeVerifySerializer,
-    ExerciseSerializer,
+    ExerciseFullSerializer,
     ExerciseSessionSerializer,
+    ExerciseShortSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
     LoginCodeRequestSerializer,
@@ -26,7 +27,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     """Вьюсет для чтения объектов модели Exercise."""
 
     queryset = Exercise.objects.filter(is_active=True)
-    serializer_class = ExerciseSerializer
+    serializer_class = ExerciseFullSerializer
     filter_backends = (
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -34,9 +35,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     )
     filterset_class = ExerciseFilter
     search_fields = ('title',)
-    ordering_fields = ('title', 'type__name', 'difficulty', 'created_at')
+    ordering_fields = ('title', 'type', 'difficulty', 'created_at')
 
     def get_serializer_class(self):
+        if self.action == 'list':
+            return ExerciseShortSerializer
         if self.action == 'pass_exercise':
             return ExerciseSessionSerializer
         return super().get_serializer_class()
