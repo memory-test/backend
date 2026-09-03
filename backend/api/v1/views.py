@@ -1,34 +1,57 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
-from rest_framework import filters, status, generics, viewsets
+from rest_framework import filters, status, generics
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from api.filters import ExerciseFilter
 from api.v1.serializers import (
     CodeVerifySerializer,
-    ExerciseSerializer,
+    ExerciseFullSerializer,
     ResultExerciseSerializer,
     ExerciseSessionSerializer,
+    ExerciseShortSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
     LoginCodeRequestSerializer,
 )
-from backend.exercises.models import Exercise
-from backend.exercises.services import ChooseExerciseService
-from backend.progress.models import ExerciseSession, UserAnswer
-from .registry import EXERCISE_REGISTRY
 from authentication import services
 from exercises.models import Exercise
-from exercises.services import check_answer
+from backend.exercises.services import ChooseExerciseService
 from progress.models import ExerciseSession, UserAnswer
 
 
-class ExerciseView(viewsets.ViewSet):
-    """Контроллер для выполнения задания"""
+class ExerciseViewSet(ReadOnlyModelViewSet):
+    """Вьюсет для чтения объектов модели Exercise."""
+
+    queryset = Exercise.objects.filter(is_active=True)
+    serializer_class = ExerciseFullSerializer
+    filter_backends = (
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    )
+    filterset_class = ExerciseFilter
+    search_fields = ('title',)
+    ordering_fields = ('title', 'type', 'difficulty', 'created_at')
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ExerciseShortSerializer
+        if self.action == 'pass_exercise':
+            return ExerciseSessionSerializer
+        return super().get_serializer_class()
+
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='pass',
+        permission_classes=[IsAuthenticated],
+    )
 
     def _get_config(self, exercise_id: int) -> ExerciseConfig:
         """Вспомогательный метод для получения конфигурации по id задания."""
@@ -42,26 +65,6 @@ class ExerciseView(viewsets.ViewSet):
             raise status.HTTP_400_BAD_REQUEST
         return config
 
-    def list(self, request):
-        queryset = Exercise.objects.filter(is_active=True)
-        serializer = ExerciseSerializer(queryset, many=True)
-        return Response(serializer.data)
-
-    def retrieve(self, request, pk=None):
-        """
-        Отдает структуру задания.
-        """
-        config = self._get_config(pk)
-        exercise = config.service.get_exercise(pk)
-        serializer = config.read_serializer(exercise, context={'exercise': exercise})
-        return Response(serializer.data)
-
-    @action(
-        detail=True,
-        methods=['post'],
-        url_path='pass',
-        permission_classes=[IsAuthenticated],
-    )
     def pass_exercise(self, request, pk=None):
         """
         Получает результаты прохождения задания

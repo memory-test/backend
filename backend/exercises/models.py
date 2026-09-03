@@ -73,6 +73,8 @@ class Exercise(models.Model):
         relation_name = self.ANSWER_RELATIONS.get(self.type)
         if relation_name is None:
             return False
+        if self.type == 'input':
+            return hasattr(self, relation_name)
         return getattr(self, relation_name).exists()
 
     def clean(self):
@@ -157,9 +159,6 @@ class ChoiceAnswer(AnswerTextImageFields):
     """Ответы с выбором варианта(ов)."""
 
     is_correct = models.BooleanField('Верный')
-
-    def __str__(self):
-        return super().__str__()
 
     class Meta(AnswerTextImageFields.Meta):
         ordering = [

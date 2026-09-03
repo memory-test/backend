@@ -2,38 +2,37 @@ from rest_framework import serializers
 
 from authentication import services
 from authentication.constants import CODE_LENGTH
-from exercises.models import Exercise, ChoiceAnswer
+from exercises.models import (
+    ChoiceAnswer,
+    DrawingAnswer,
+    Exercise,
+    ExerciseType,
+    GroupingAnswer,
+    MatchingAnswer,
+    OrderingAnswer,
+)
 from progress.models import ExerciseSession, UserAnswer
 from users.constants import EMAIL_LENGTH
 
 
-class ExerciseSerializer(serializers.ModelSerializer):
-    """Сериализатор объектов класса Exercise."""
+class AnswerBaseSerializer(serializers.ModelSerializer):
+    """Сериализатор ответов с полями "текст" и "изображение".
+
+    Только для наследования, не применяется напрямую.
+    """
 
     class Meta:
-        model = Exercise
         fields = (
-            'id',
-            'title',
-            'description',
-            'type',
-            'difficulty',
-            'is_active',
-            'created_at',
+            'text',
+            'image',
         )
 
-class ChoiceAnswerSerializer(serializers.ModelSerializer):
-    class Meta:
+
+class ChoiceAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на выбор варианта(ов)."""
+
+    class Meta(AnswerBaseSerializer.Meta):
         model = ChoiceAnswer
-        fields = ['id', 'text', 'image']
-
-class ChoiceExerciseSerializer(serializers.ModelSerializer):
-    options = ChoiceAnswerSerializer(many=True, read_only=True, source='choiceanswers')
-
-    class Meta:
-        model = Exercise
-        fields = ['id', 'title', 'description', 'question', 'image', 'audio', 'options']
-
 
 class ChoiceCheckSerializer(serializers.Serializer):
     answers_ids = serializers.ListField(
@@ -59,8 +58,107 @@ class ResultExerciseSerializer(serializers.Serializer):
     score = serializers.FloatField(required=True)
     success = serializers.BooleanField(required=True)
 
-# TODO: будет изменена модель,
-#  следовательно надо будет изменить сериализатор.
+
+
+class OrderingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на сортировку."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = OrderingAnswer
+
+
+class GroupingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на группировку."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = GroupingAnswer
+
+
+class MatchingAnswerSerializer(serializers.ModelSerializer):
+    """Сериализатор ответов на сопоставление."""
+
+    class Meta:
+        model = MatchingAnswer
+        fields = (
+            'first_text',
+            'first_image',
+            'second_text',
+            'second_image',
+        )
+
+
+class DrawingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор графических ответов."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = DrawingAnswer
+        fields = AnswerBaseSerializer.Meta.fields + (
+            'completion_only',
+            'additional_image',
+        )
+
+
+class ExerciseShortSerializer(serializers.ModelSerializer):
+    """Сериализатор краткого представления объектов класса Exercise.
+
+    Для использования при отображении списка заданий.
+    """
+
+    class Meta:
+        model = Exercise
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'is_active',
+            'created_at',
+        )
+
+
+class ExerciseFullSerializer(ExerciseShortSerializer):
+    """Сериализатор полного представления объектов класса Exercise."""
+
+    answers_info = serializers.SerializerMethodField(read_only=True)
+
+    ANSWER_SERIALIZERS = {
+        ExerciseType.CHOICE: ChoiceAnswerSerializer,
+        ExerciseType.ORDERING: OrderingAnswerSerializer,
+        ExerciseType.GROUPING: GroupingAnswerSerializer,
+        ExerciseType.MATCHING: MatchingAnswerSerializer,
+        ExerciseType.DRAWING: DrawingAnswerSerializer,
+    }
+
+    def get_answers_info(self, obj: Exercise):
+        serializer_class = self.ANSWER_SERIALIZERS.get(obj.type)
+        if serializer_class is None:
+            return []
+        relation_name = obj.ANSWER_RELATIONS.get(obj.type)
+        answers = getattr(obj, relation_name).all()
+
+        return serializer_class(
+            answers,
+            many=True,
+            context=self.context,
+        ).data
+
+    class Meta(ExerciseShortSerializer.Meta):
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'question',
+            'image',
+            'audio',
+            'is_active',
+            'created_at',
+            'answers_info',
+        )
+
+
 class ExerciseSessionSerializer(serializers.Serializer):
     """Валидирует данные, которые присылвает фронтенд."""
 
