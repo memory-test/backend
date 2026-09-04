@@ -27,7 +27,7 @@ class ExerciseSession(models.Model):
     )
     started_at = models.DateTimeField(verbose_name='Время начала')
     finished_at = models.DateTimeField(verbose_name='Время окончания')
-    duration_seconds = models.IntegerField(verbose_name='Длительность (сек)')
+    duration_seconds = models.PositiveIntegerField(verbose_name='Длительность (сек)')
     success = models.BooleanField(verbose_name='Успешно выполнено')
     score = models.FloatField(verbose_name='Оценка')
 

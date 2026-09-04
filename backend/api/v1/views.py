@@ -13,7 +13,6 @@ from api.v1.serializers import (
     CodeVerifySerializer,
     ExerciseFullSerializer,
     ResultExerciseSerializer,
-    ExerciseSessionSerializer,
     ExerciseShortSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
@@ -21,7 +20,7 @@ from api.v1.serializers import (
 )
 from authentication import services
 from exercises.models import Exercise
-from progress.models import ExerciseSession, UserAttemt
+from progress.models import ExerciseSession, UserAttempt
 
 from .registry import EXERCISE_REGISTRY
 
@@ -43,8 +42,6 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return ExerciseShortSerializer
-        if self.action == 'pass_exercise':
-            return ExerciseSessionSerializer
         return super().get_serializer_class()
 
     def _get_config(self, exercise_id: int) -> ExerciseConfig:
@@ -74,7 +71,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         task_result = config.service.check_answer(
             exercise, clean_data
         )
-        exercise_snapshot = ExerciseFullSerializer(
+        exercise_snapshot =ExerciseFullSerializer(
             exercise,
             context={'show_correct': True}
         ).data
@@ -97,7 +94,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 success=task_result.success,
                 score=task_result.score
             )
-            UserAttemt.objects.create(
+            UserAttempt.objects.create(
                 session=session,
                 answer_data=complete_attempt_data,
             )

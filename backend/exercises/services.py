@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 from django.shortcuts import get_object_or_404
 
-from backend.exercises.models import Exercise
+from exercises.models import Exercise
 
 
 @dataclass(frozen=True, slots=True)
