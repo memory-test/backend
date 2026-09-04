@@ -33,6 +33,14 @@ class ChoiceAnswerSerializer(AnswerBaseSerializer):
 
     class Meta(AnswerBaseSerializer.Meta):
         model = ChoiceAnswer
+        fields = AnswerBaseSerializer.Meta.fields + ('id', 'is_correct')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Если в контексте НЕТ флага show_correct — удаляем поле, чтобы студент его не подсмотрел
+        if not self.context.get('show_correct', False):
+            data.pop('is_correct', None)
+        return data
 
 class ChoiceCheckSerializer(serializers.Serializer):
     answers_ids = serializers.ListField(

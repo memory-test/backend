@@ -33,6 +33,7 @@ class AbstractExerciseService(ABC):
         ...
 
 
+
 class ChooseExerciseService(AbstractExerciseService):
 
     def get_exercise(self, exercise_id: int) -> Exercise:
@@ -44,7 +45,7 @@ class ChooseExerciseService(AbstractExerciseService):
         ]
         user_choices: list = user_answer_data.get('answers_ids')
         success = sorted(user_choices) == sorted(correct_options)
-        # пока нельзя однозначно определить сколько баллов получит пользователь
-        # за выполнения задания, поэтому пока так.
+        # TODO: Релизовать алгоритм вычисления баллов за выполнения задания,
+        #  для этого нужна будет формула.
         score = 100 if success else 0
         return EvaluationResult(success=success, score=score)

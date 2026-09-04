@@ -21,8 +21,9 @@ from api.v1.serializers import (
 )
 from authentication import services
 from exercises.models import Exercise
-from backend.exercises.services import ChooseExerciseService
-from progress.models import ExerciseSession, UserAnswer
+from progress.models import ExerciseSession, UserAttemt
+
+from .registry import EXERCISE_REGISTRY
 
 
 class ExerciseViewSet(ReadOnlyModelViewSet):
@@ -46,13 +47,6 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
             return ExerciseSessionSerializer
         return super().get_serializer_class()
 
-    @action(
-        detail=True,
-        methods=['post'],
-        url_path='pass',
-        permission_classes=[IsAuthenticated],
-    )
-
     def _get_config(self, exercise_id: int) -> ExerciseConfig:
         """Вспомогательный метод для получения конфигурации по id задания."""
         exercise_type = get_object_or_404(
@@ -65,15 +59,13 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
             raise status.HTTP_400_BAD_REQUEST
         return config
 
+    @action(
+        detail=True,
+        methods=['post'],
+        url_path='pass',
+        permission_classes=[IsAuthenticated],
+    )
     def pass_exercise(self, request, pk=None):
-        """
-        Получает результаты прохождения задания
-        и в зависимости от его типа валидирует данные
-        и проверяет ответ, также сохраняет сессию прохождения задания
-        и ответы пользователя.
-        :returns ResultExerciseSerializer
-        """
-
         config = self._get_config(pk)
         exercise = config.service.get_exercise(pk)
         serializer = config.write_serializer(data=request.data)
@@ -82,8 +74,18 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         task_result = config.service.check_answer(
             exercise, clean_data
         )
+        exercise_snapshot = ExerciseFullSerializer(
+            exercise,
+            context={'show_correct': True}
+        ).data
+        complete_attempt_data = {
+            "exercise_snapshot": exercise_snapshot,
+            "user_response": {
+                "user_choice": clean_data,
+                "result": task_result.success
+            }
+        }
 
-        # TODO: добавить обработку ошибок.
         with transaction.atomic():
             session = ExerciseSession.objects.create(
                 user=request.user,
@@ -95,16 +97,10 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 success=task_result.success,
                 score=task_result.score
             )
-            # TODO: в модели UserAnswer реализовать логику
-            #  сохранения ответов пользователя (не в JSON).
-            UserAnswer.objects.create(
+            UserAttemt.objects.create(
                 session=session,
-                answer_data=clean_data.get('answer_data'),
-                is_correct=task_result.get('is_correct'),
-                response_time=float(clean_data.get('duration_seconds')),
+                answer_data=complete_attempt_data,
             )
-
-        # TODO: дописать task_result
         return Response(ResultExerciseSerializer(task_result))
 
 
