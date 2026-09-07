@@ -1,7 +1,7 @@
 from rest_framework import serializers
 
-from authentication import services
 from authentication.constants import CODE_LENGTH
+from authentication.models import EmailCode
 from exercises.models import (
     ChoiceAnswer,
     DrawingAnswer,
@@ -252,8 +252,8 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
 
 
 VERIFY_PURPOSES = (
-    (services.REGISTRATION, 'Регистрация'),
-    (services.LOGIN, 'Вход'),
+    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
+    (EmailCode.Purpose.LOGIN, 'Вход'),
 )
 
 

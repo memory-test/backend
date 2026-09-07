@@ -15,15 +15,16 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.mail import send_mail
 from django.utils import timezone
+from rest_framework_simplejwt.token_blacklist.models import (
+    BlacklistedToken,
+    OutstandingToken,
+)
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from users.models import User
 
 from . import constants
 from .models import EmailCode
-
-REGISTRATION = EmailCode.Purpose.REGISTRATION.value
-LOGIN = EmailCode.Purpose.LOGIN.value
-PASSWORD_RESET = EmailCode.Purpose.PASSWORD_RESET.value
 
 
 class CodeError(Exception):
@@ -43,14 +44,16 @@ class CodeVerificationError(CodeError):
 
 
 _SUBJECTS = {
-    REGISTRATION: 'Подтверждение регистрации',
-    LOGIN: 'Код для входа',
-    PASSWORD_RESET: 'Восстановление пароля',
+    EmailCode.Purpose.REGISTRATION: 'Подтверждение регистрации',
+    EmailCode.Purpose.LOGIN: 'Код для входа',
+    EmailCode.Purpose.PASSWORD_RESET: 'Восстановление пароля',
 }
 _TEMPLATES = {
-    REGISTRATION: 'Ваш код подтверждения регистрации: {code}',
-    LOGIN: 'Ваш код для входа: {code}',
-    PASSWORD_RESET: 'Ваш код для сброса пароля: {code}',
+    EmailCode.Purpose.REGISTRATION: (
+        'Ваш код подтверждения регистрации: {code}'
+    ),
+    EmailCode.Purpose.LOGIN: 'Ваш код для входа: {code}',
+    EmailCode.Purpose.PASSWORD_RESET: 'Ваш код для сброса пароля: {code}',
 }
 
 
@@ -113,53 +116,46 @@ def consume_code(email: str, code: str, purpose: str) -> None:
     Поднимает CodeVerificationError при любой ошибке проверки
     (не найден, просрочен, лимит попыток, неверный код).
     """
-    instance = (
+    email_code = (
         EmailCode.objects.filter(email=email, purpose=purpose, is_used=False)
         .order_by('-created_at')
         .first()
     )
-    if instance is None:
+    if email_code is None:
         raise CodeVerificationError('Код не найден или уже использован.')
-    if instance.expires_at <= timezone.now():
-        instance.is_used = True
-        instance.save(update_fields=['is_used'])
+    if email_code.expires_at <= timezone.now():
+        email_code.is_used = True
+        email_code.save(update_fields=['is_used'])
         raise CodeVerificationError('Срок действия кода истёк.')
-    if instance.attempts >= constants.MAX_VERIFY_ATTEMPTS:
-        instance.is_used = True
-        instance.save(update_fields=['is_used', 'attempts'])
+    if email_code.attempts >= constants.MAX_VERIFY_ATTEMPTS:
+        email_code.is_used = True
+        email_code.save(update_fields=['is_used', 'attempts'])
         raise CodeVerificationError(
             'Превышено число попыток. Запросите новый код.'
         )
-    if not check_password(code, instance.code_hash):
-        instance.attempts += 1
-        instance.save(update_fields=['attempts'])
+    if not check_password(code, email_code.code_hash):
+        email_code.attempts += 1
+        email_code.save(update_fields=['attempts'])
         raise CodeVerificationError('Неверный код.')
-    instance.is_used = True
-    instance.save(update_fields=['is_used'])
+    email_code.is_used = True
+    email_code.save(update_fields=['is_used'])
 
 
 def _issue_tokens(user: User) -> dict:
     """Возвращает пару JWT (access, refresh) для пользователя."""
-    from rest_framework_simplejwt.tokens import RefreshToken
-
     refresh = RefreshToken.for_user(user)
     return {'access': str(refresh.access_token), 'refresh': str(refresh)}
 
 
 def blacklist_user_tokens(user: User) -> None:
     """Блокирует все ранее выданные токены пользователя."""
-    from rest_framework_simplejwt.token_blacklist.models import (
-        BlacklistedToken,
-        OutstandingToken,
-    )
-
     for token in OutstandingToken.objects.filter(user=user):
         BlacklistedToken.objects.get_or_create(token=token)
 
 
 def confirm_registration(email: str, code: str) -> tuple[User, dict]:
     """Подтверждает код регистрации, активирует пользователя, выдаёт JWT."""
-    consume_code(email, code, REGISTRATION)
+    consume_code(email, code, EmailCode.Purpose.REGISTRATION)
     user = User.objects.get(email=email)
     if not user.is_active:
         user.is_active = True
@@ -176,11 +172,11 @@ def request_login_code(email: str) -> None:
     user = User.objects.filter(email=email).first()
     if user is None or not user.is_active:
         return
-    issue_code(email, LOGIN)
+    issue_code(email, EmailCode.Purpose.LOGIN)
 
 
 def login_with_code(email: str, code: str) -> tuple[User, dict]:
     """Подтверждает код входа и выдаёт JWT."""
-    consume_code(email, code, LOGIN)
+    consume_code(email, code, EmailCode.Purpose.LOGIN)
     user = User.objects.get(email=email)
     return user, _issue_tokens(user)

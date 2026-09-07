@@ -23,23 +23,26 @@ AUTH_USER_MODEL = 'users.User'
 
 
 INSTALLED_APPS = [
+    # Django
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Сторонние
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'djoser',
+    'drf_spectacular',
+    # Локальные приложения
     'authentication.apps.AuthenticationConfig',
     'users.apps.UsersConfig',
     'exercises.apps.ExercisesConfig',
     'progress.apps.ProgressConfig',
     'api.apps.ApiConfig',
-    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -172,13 +175,10 @@ DJOSER = {
     },
 }
 
-# Email: в DEBUG коды пишутся в консоль, в проде — через SMTP из окружения
-EMAIL_BACKEND = (
-    'django.core.mail.backends.console.EmailBackend'
-    if DEBUG
-    else os.getenv(
-        'EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend'
-    )
+# Email: по умолчанию коды пишутся в консоль (локальная разработка),
+# в проде бэкенд задаётся через окружение
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
 )
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
