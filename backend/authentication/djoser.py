@@ -16,6 +16,7 @@ from users.constants import EMAIL_LENGTH
 from users.models import User
 
 from . import constants, services
+from .models import EmailCode
 
 PASSWORD_STYLE = {'input_type': 'password'}
 
@@ -82,7 +83,7 @@ class CodeActivationSerializer(serializers.Serializer):
         """Проверяет код активации и поднимает self.user."""
         try:
             services.consume_code(
-                attrs['email'], attrs['code'], services.REGISTRATION
+                attrs['email'], attrs['code'], EmailCode.Purpose.REGISTRATION
             )
         except services.CodeVerificationError as exc:
             raise serializers.ValidationError({'detail': str(exc)})
@@ -129,7 +130,7 @@ class CodePasswordResetConfirmSerializer(serializers.Serializer):
             )
         try:
             services.consume_code(
-                attrs['email'], attrs['code'], services.PASSWORD_RESET
+                attrs['email'], attrs['code'], EmailCode.Purpose.PASSWORD_RESET
             )
         except services.CodeVerificationError as exc:
             raise serializers.ValidationError({'detail': str(exc)})
@@ -163,10 +164,10 @@ class _CodeEmailMixin:
 class CodeActivationEmail(_CodeEmailMixin, ActivationEmail):
     """Письмо с кодом активации при регистрации/пересылке."""
 
-    purpose = services.REGISTRATION
+    purpose = EmailCode.Purpose.REGISTRATION
 
 
 class CodePasswordResetEmail(_CodeEmailMixin, PasswordResetEmail):
     """Письмо с кодом сброса пароля."""
 
-    purpose = services.PASSWORD_RESET
+    purpose = EmailCode.Purpose.PASSWORD_RESET

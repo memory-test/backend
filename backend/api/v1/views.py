@@ -20,6 +20,7 @@ from api.v1.serializers import (
     LoginCodeRequestSerializer,
 )
 from authentication import services
+from authentication.models import EmailCode
 from exercises.models import Exercise
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
@@ -147,8 +148,8 @@ class HistoryDetailView(generics.RetrieveAPIView):
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
 
 _VERIFY_CODE_HANDLERS = {
-    services.REGISTRATION: services.confirm_registration,
-    services.LOGIN: services.login_with_code,
+    EmailCode.Purpose.REGISTRATION: services.confirm_registration,
+    EmailCode.Purpose.LOGIN: services.login_with_code,
 }
 
 
