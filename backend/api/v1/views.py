@@ -1,6 +1,8 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import filters, generics, status
+from rest_framework import serializers as drf_serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -22,8 +24,16 @@ from authentication.models import EmailCode
 from exercises.models import Exercise
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
+from drf_spectacular.utils import extend_schema, extend_schema_view
+from api.v1.schema.params import RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM
 
 
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM],
+    )
+)
 class ExerciseViewSet(ReadOnlyModelViewSet):
     """Вьюсет для чтения объектов модели Exercise."""
 
@@ -101,6 +111,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         )
 
 
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[RU_LIMIT_PARAM, RU_PAGE_PARAM],
+    ),
+)
 class HistoryListView(generics.ListAPIView):
     """История прохождения. Список завершенных упражнений."""
 
@@ -138,6 +153,19 @@ _VERIFY_CODE_HANDLERS = {
 }
 
 
+@extend_schema(
+    request=LoginCodeRequestSerializer,
+    responses={
+        200: inline_serializer(
+            'LoginCodeRequestResponse',
+            {'detail': drf_serializers.CharField()},
+        ),
+        429: inline_serializer(
+            'LoginCodeRequestThrottled',
+            {'detail': drf_serializers.CharField()},
+        ),
+    },
+)
 class LoginCodeRequestView(APIView):
     """Запрос кода для входа — анти-enumeration ответ."""
 
@@ -156,6 +184,22 @@ class LoginCodeRequestView(APIView):
         return Response({'detail': ENUMERATION_MSG})
 
 
+@extend_schema(
+    request=CodeVerifySerializer,
+    responses={
+        200: inline_serializer(
+            'CodeVerifyResponse',
+            {
+                'access': drf_serializers.CharField(),
+                'refresh': drf_serializers.CharField(),
+            },
+        ),
+        400: inline_serializer(
+            'CodeVerifyError',
+            {'detail': drf_serializers.CharField()},
+        ),
+    },
+)
 class CodeVerifyView(APIView):
     """Подтверждение кода (регистрация/вход) с выдачей JWT."""
 

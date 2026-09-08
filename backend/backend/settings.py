@@ -143,6 +143,21 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API для тренажера памяти',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'DifficultyEnum': 'users.models.Difficulty.choices',
+    },
+    'POSTPROCESSING_HOOKS': [
+        'api.v1.schema.hooks.add_tags_by_path',
+    ],
+    'TAGS': [
+        {
+            'name': 'Авторизация',
+            'description': 'Вход, токены, коды подтверждения',
+        },
+        {'name': 'Профиль', 'description': 'Управление профилем пользователя'},
+        {'name': 'Задания', 'description': 'Задания и упражнения'},
+        {'name': 'Прогресс', 'description': 'История и прогресс прохождения'},
+    ],
 }
 
 SIMPLE_JWT = {
