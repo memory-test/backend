@@ -13,7 +13,7 @@ from exercises.models import (
     MatchingAnswer,
     OrderingAnswer,
 )
-from progress.models import ExerciseSession, UserAnswer
+from progress.models import ExerciseSession, UserAttempt
 from users.constants import EMAIL_LENGTH
 
 
@@ -35,6 +35,65 @@ class ChoiceAnswerSerializer(AnswerBaseSerializer):
 
     class Meta(AnswerBaseSerializer.Meta):
         model = ChoiceAnswer
+        fields = AnswerBaseSerializer.Meta.fields + ('id', 'is_correct')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Если в контексте НЕТ флага show_correct — удаляем поле, чтобы студент его не подсмотрел
+        if not self.context.get('show_correct', False):
+            data.pop('is_correct', None)
+        return data
+
+
+class BaseCheckSerializer(serializers.Serializer):
+    started_at = serializers.DateTimeField(required=True)
+    finished_at = serializers.DateTimeField(required=True)
+    duration_seconds = serializers.IntegerField(required=True)
+
+    def validate(self, attrs):
+        """Проверяем согласованность даты начала и окончания задания."""
+        if attrs['started_at'] >= attrs['finished_at']:
+            raise serializers.ValidationError(
+                {
+                    'finished_at': (
+                        'Время окончания должно быть позже времени начала.'
+                    )
+                }
+            )
+        return attrs
+
+    def validate_duration_seconds(self, value):
+        if value < 0:
+            raise serializers.ValidationError(
+                'Продолжительность не может быть отрицательной.'
+            )
+        return value
+
+
+class ChoiceCheckSerializer(BaseCheckSerializer):
+    answers_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False
+    )
+
+    def validate(self, attrs):
+        exercise = self.context.get('exercise')
+        user_answers_ids = list(set(attrs.get('answers_ids')))
+        allowed_ids = [answer.id for answer in exercise.choiceanswers.all()]
+        for answer_id in user_answers_ids:
+            if answer_id not in allowed_ids:
+                raise serializers.ValidationError(
+                    {'answers_ids': f'Вариант ответа с ID {answer_id} не принадлежит данному заданию.'}
+                )
+        attrs['answers_ids'] = user_answers_ids
+        return attrs
+
+
+
+class ResultExerciseSerializer(serializers.Serializer):
+    score = serializers.FloatField(required=True)
+    success = serializers.BooleanField(required=True)
+
 
 
 class OrderingAnswerSerializer(AnswerBaseSerializer):
@@ -137,36 +196,6 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         )
 
 
-class ExerciseSessionSerializer(serializers.Serializer):
-    """Валидирует данные, которые присылвает фронтенд."""
-
-    started_at = serializers.DateTimeField(required=True)
-    finished_at = serializers.DateTimeField(required=True)
-    duration_seconds = serializers.IntegerField(required=True)
-    # пока это поле рассчитано, что за одно упражнение пользователь
-    # отправляет один финальный результат, в дальнейшем напишем сериализатор.
-    answer_data = serializers.JSONField(required=True)
-
-    def validate(self, attrs):
-        """Проверяем согласованность даты начала и окончания задания."""
-        if attrs['started_at'] >= attrs['finished_at']:
-            raise serializers.ValidationError(
-                {
-                    'finished_at': (
-                        'Время окончания должно быть позже времени начала.'
-                    )
-                }
-            )
-        return attrs
-
-    def validate_duration_seconds(self, value):
-        if value < 0:
-            raise serializers.ValidationError(
-                'Продолжительность не может быть отрицательной.'
-            )
-        return value
-
-
 class HistoryListSerializer(serializers.ModelSerializer):
     """Список краткой истории прохождения упражнений."""
 
@@ -193,7 +222,7 @@ class HistoryListSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
-
+# TODO: изменить сериализатор под модель UserAttempt
 class AnswerDetailSerializer(serializers.ModelSerializer):
     """Детальный просмотр ответа пользователя."""
 
@@ -202,7 +231,8 @@ class AnswerDetailSerializer(serializers.ModelSerializer):
     correct_answer = serializers.SerializerMethodField()
 
     class Meta:
-        model = UserAnswer
+        # изменил модель, чтобы успешно применить миграции.
+        model = UserAttempt
         fields = [
             'id',
             'question_text',
@@ -224,7 +254,7 @@ class AnswerDetailSerializer(serializers.ModelSerializer):
     def get_correct_answer(self, obj):
         return obj.answer_data.get('correct_answer')
 
-
+# TODO: изменить сериализатор под обновленную модель ExerciseSession
 class HistoryDetailSerializer(serializers.ModelSerializer):
     """Детальный просмотр прохождения упражнения (с ответами)."""
 

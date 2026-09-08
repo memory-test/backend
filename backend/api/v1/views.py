@@ -1,5 +1,7 @@
 from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
+from rest_framework import filters, status, generics
 from drf_spectacular.utils import extend_schema, inline_serializer
 from rest_framework import filters, generics, status
 from rest_framework import serializers as drf_serializers
@@ -13,7 +15,7 @@ from api.filters import ExerciseFilter
 from api.v1.serializers import (
     CodeVerifySerializer,
     ExerciseFullSerializer,
-    ExerciseSessionSerializer,
+    ResultExerciseSerializer,
     ExerciseShortSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
@@ -22,6 +24,9 @@ from api.v1.serializers import (
 from authentication import services
 from authentication.models import EmailCode
 from exercises.models import Exercise
+from progress.models import ExerciseSession, UserAttempt
+
+from .registry import EXERCISE_REGISTRY
 from exercises.services import check_answer
 from progress.models import ExerciseSession, UserAnswer
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -51,9 +56,19 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     def get_serializer_class(self):
         if self.action == 'list':
             return ExerciseShortSerializer
-        if self.action == 'pass_exercise':
-            return ExerciseSessionSerializer
         return super().get_serializer_class()
+
+    def _get_config(self, exercise_id: int) -> ExerciseConfig:
+        """Вспомогательный метод для получения конфигурации по id задания."""
+        exercise_type = get_object_or_404(
+            Exercise.objects.values('type'),
+            id=exercise_id
+        )['type']
+
+        config = EXERCISE_REGISTRY.get(exercise_type)
+        if not config:
+            raise status.HTTP_400_BAD_REQUEST
+        return config
 
     @action(
         detail=True,
@@ -62,53 +77,42 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         permission_classes=[IsAuthenticated],
     )
     def pass_exercise(self, request, pk=None):
-        exercise = self.get_object()
-        serializer = self.get_serializer(data=request.data)
+        config = self._get_config(pk)
+        exercise = config.service.get_exercise(pk)
+        serializer = config.write_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        clean_data: dict = serializer.validated_data
-        task_result: dict = check_answer(
-            exercise, clean_data.get('answer_data')
+        clean_data = serializer.validated_data
+        task_result = config.service.check_answer(
+            exercise, clean_data
         )
-        # здесь получаем количество попыток пользователя до этой сессии.
-        sessions_count: int = (
-            ExerciseSession.objects.filter(
-                user=request.user, exercise_id=exercise
-            ).count()
-            + 1
-        )
+        exercise_snapshot =ExerciseFullSerializer(
+            exercise,
+            context={'show_correct': True}
+        ).data
+        complete_attempt_data = {
+            "exercise_snapshot": exercise_snapshot,
+            "user_response": {
+                "user_choice": clean_data,
+                "result": task_result.success
+            }
+        }
 
-        # будет сохранять в бд 2 записи, иначе ничего.
-        # Также чуть позже настроим зедсь логирвоние ошибок,
-        # если вдруг записи не сохраняться.
         with transaction.atomic():
             session = ExerciseSession.objects.create(
                 user=request.user,
                 exercise_id=exercise,
-                difficulty=task_result.get('difficulty'),
+                difficulty=exercise.difficulty,
                 started_at=clean_data.get('started_at'),
                 finished_at=clean_data.get('finished_at'),
                 duration_seconds=clean_data.get('duration_seconds'),
-                success=task_result.get('success'),
-                score=task_result.get('score'),
-                attempts_count=sessions_count,
+                success=task_result.success,
+                score=task_result.score
             )
-            UserAnswer.objects.create(
+            UserAttempt.objects.create(
                 session=session,
-                answer_data=clean_data.get('answer_data'),
-                is_correct=task_result.get('is_correct'),
-                response_time=float(clean_data.get('duration_seconds')),
+                answer_data=complete_attempt_data,
             )
-
-        return Response(
-            {
-                'status': 'success',
-                'session_id': session.id,
-                'score': session.score,
-                'success': session.success,
-                'attempts_count': session.attempts_count,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+        return Response(ResultExerciseSerializer(task_result))
 
 
 @extend_schema_view(

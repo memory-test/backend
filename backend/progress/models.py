@@ -27,31 +27,26 @@ class ExerciseSession(models.Model):
     )
     started_at = models.DateTimeField(verbose_name='Время начала')
     finished_at = models.DateTimeField(verbose_name='Время окончания')
-    duration_seconds = models.IntegerField(verbose_name='Длительность (сек)')
+    duration_seconds = models.PositiveIntegerField(verbose_name='Длительность (сек)')
     success = models.BooleanField(verbose_name='Успешно выполнено')
     score = models.FloatField(verbose_name='Оценка')
-    attempts_count = models.IntegerField(verbose_name='Количество попыток')
 
     class Meta:
-        db_table = 'exercise_sessions'
         verbose_name = 'Сессия упражнения'
         verbose_name_plural = 'Сессии упражнений'
-        ordering = ['id']
+        ordering = ['-started_at']
 
 
-class UserAnswer(models.Model):
-    session = models.ForeignKey(
+class UserAttempt(models.Model):
+    session = models.OneToOneField(
         'ExerciseSession',
         on_delete=models.CASCADE,
-        related_name='answers',
+        related_name='attempt',
         verbose_name='Сессия упражнения',
     )
     answer_data = models.JSONField(verbose_name='Данные ответа (JSON)')
-    is_correct = models.BooleanField(verbose_name='Ответ верный')
-    response_time = models.FloatField(verbose_name='Время ответа (сек)')
 
     class Meta:
-        db_table = 'exercise_answers'
         verbose_name = 'Ответ пользователя'
         verbose_name_plural = 'Ответы пользователей'
         ordering = ['id']
