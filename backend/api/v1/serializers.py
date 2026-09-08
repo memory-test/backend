@@ -1,7 +1,9 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from authentication import services
 from authentication.constants import CODE_LENGTH
+from authentication.models import EmailCode
 from exercises.models import (
     ChoiceAnswer,
     DrawingAnswer,
@@ -164,6 +166,7 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         ExerciseType.DRAWING: DrawingAnswerSerializer,
     }
 
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_answers_info(self, obj: Exercise):
         serializer_class = self.ANSWER_SERIALIZERS.get(obj.type)
         if serializer_class is None:
@@ -239,16 +242,16 @@ class AnswerDetailSerializer(serializers.ModelSerializer):
             'response_time',
         ]
 
+    @extend_schema_field(OpenApiTypes.STR)
     def get_question_text(self, obj):
-        """Извлекаем текст вопроса из JSON."""
         return obj.answer_data.get('question_text', '')
 
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_user_answer(self, obj):
-        """Извлекаем ответ пользователя из JSON."""
         return obj.answer_data.get('user_answer')
 
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_correct_answer(self, obj):
-        """Извлекаем правильный ответ из JSON."""
         return obj.answer_data.get('correct_answer')
 
 # TODO: изменить сериализатор под обновленную модель ExerciseSession
@@ -282,8 +285,8 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
 
 
 VERIFY_PURPOSES = (
-    (services.REGISTRATION, 'Регистрация'),
-    (services.LOGIN, 'Вход'),
+    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
+    (EmailCode.Purpose.LOGIN, 'Вход'),
 )
 
 

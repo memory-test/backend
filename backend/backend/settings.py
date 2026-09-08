@@ -23,23 +23,26 @@ AUTH_USER_MODEL = 'users.User'
 
 
 INSTALLED_APPS = [
+    # Django
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Сторонние
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'djoser',
+    'drf_spectacular',
+    # Локальные приложения
     'authentication.apps.AuthenticationConfig',
     'users.apps.UsersConfig',
     'exercises.apps.ExercisesConfig',
     'progress.apps.ProgressConfig',
     'api.apps.ApiConfig',
-    'drf_spectacular',
 ]
 
 MIDDLEWARE = [
@@ -140,6 +143,21 @@ SPECTACULAR_SETTINGS = {
     'DESCRIPTION': 'API для тренажера памяти',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
+    'ENUM_NAME_OVERRIDES': {
+        'DifficultyEnum': 'users.models.Difficulty.choices',
+    },
+    'POSTPROCESSING_HOOKS': [
+        'api.v1.schema.hooks.add_tags_by_path',
+    ],
+    'TAGS': [
+        {
+            'name': 'Авторизация',
+            'description': 'Вход, токены, коды подтверждения',
+        },
+        {'name': 'Профиль', 'description': 'Управление профилем пользователя'},
+        {'name': 'Задания', 'description': 'Задания и упражнения'},
+        {'name': 'Прогресс', 'description': 'История и прогресс прохождения'},
+    ],
 }
 
 SIMPLE_JWT = {
@@ -172,13 +190,10 @@ DJOSER = {
     },
 }
 
-# Email: в DEBUG коды пишутся в консоль, в проде — через SMTP из окружения
-EMAIL_BACKEND = (
-    'django.core.mail.backends.console.EmailBackend'
-    if DEBUG
-    else os.getenv(
-        'EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend'
-    )
+# Email: по умолчанию коды пишутся в консоль (локальная разработка),
+# в проде бэкенд задаётся через окружение
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
 )
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))

@@ -2,6 +2,9 @@ from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from rest_framework import filters, status, generics
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import filters, generics, status
+from rest_framework import serializers as drf_serializers
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -19,12 +22,23 @@ from api.v1.serializers import (
     LoginCodeRequestSerializer,
 )
 from authentication import services
+from authentication.models import EmailCode
 from exercises.models import Exercise
 from progress.models import ExerciseSession, UserAttempt
 
 from .registry import EXERCISE_REGISTRY
+from exercises.services import check_answer
+from progress.models import ExerciseSession, UserAnswer
+from drf_spectacular.utils import extend_schema, extend_schema_view
+from api.v1.schema.params import RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM
 
 
+
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM],
+    )
+)
 class ExerciseViewSet(ReadOnlyModelViewSet):
     """Вьюсет для чтения объектов модели Exercise."""
 
@@ -101,6 +115,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         return Response(ResultExerciseSerializer(task_result))
 
 
+@extend_schema_view(
+    list=extend_schema(
+        parameters=[RU_LIMIT_PARAM, RU_PAGE_PARAM],
+    ),
+)
 class HistoryListView(generics.ListAPIView):
     """История прохождения. Список завершенных упражнений."""
 
@@ -133,11 +152,24 @@ class HistoryDetailView(generics.RetrieveAPIView):
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
 
 _VERIFY_CODE_HANDLERS = {
-    services.REGISTRATION: services.confirm_registration,
-    services.LOGIN: services.login_with_code,
+    EmailCode.Purpose.REGISTRATION: services.confirm_registration,
+    EmailCode.Purpose.LOGIN: services.login_with_code,
 }
 
 
+@extend_schema(
+    request=LoginCodeRequestSerializer,
+    responses={
+        200: inline_serializer(
+            'LoginCodeRequestResponse',
+            {'detail': drf_serializers.CharField()},
+        ),
+        429: inline_serializer(
+            'LoginCodeRequestThrottled',
+            {'detail': drf_serializers.CharField()},
+        ),
+    },
+)
 class LoginCodeRequestView(APIView):
     """Запрос кода для входа — анти-enumeration ответ."""
 
@@ -156,6 +188,22 @@ class LoginCodeRequestView(APIView):
         return Response({'detail': ENUMERATION_MSG})
 
 
+@extend_schema(
+    request=CodeVerifySerializer,
+    responses={
+        200: inline_serializer(
+            'CodeVerifyResponse',
+            {
+                'access': drf_serializers.CharField(),
+                'refresh': drf_serializers.CharField(),
+            },
+        ),
+        400: inline_serializer(
+            'CodeVerifyError',
+            {'detail': drf_serializers.CharField()},
+        ),
+    },
+)
 class CodeVerifyView(APIView):
     """Подтверждение кода (регистрация/вход) с выдачей JWT."""
 
