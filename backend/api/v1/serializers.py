@@ -203,7 +203,7 @@ class HistoryListSerializer(serializers.ModelSerializer):
         source='exercise.title', read_only=True
     )
     exercise_type = serializers.CharField(
-        source='exercise.type.name', read_only=True
+        source='exercise.type', read_only=True
     )
 
     class Meta:
@@ -218,7 +218,6 @@ class HistoryListSerializer(serializers.ModelSerializer):
             'started_at',
             'finished_at',
             'duration_seconds',
-            'attempts_count',
         ]
         read_only_fields = fields
 
@@ -238,8 +237,6 @@ class AnswerDetailSerializer(serializers.ModelSerializer):
             'question_text',
             'user_answer',
             'correct_answer',
-            'is_correct',
-            'response_time',
         ]
 
     @extend_schema_field(OpenApiTypes.STR)
@@ -262,9 +259,9 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
         source='exercise.title', read_only=True
     )
     exercise_type = serializers.CharField(
-        source='exercise.type.name', read_only=True
+        source='exercise.type', read_only=True
     )
-    answers = AnswerDetailSerializer(many=True, read_only=True)
+    attempt = AnswerDetailSerializer(read_only=True)
 
     class Meta:
         model = ExerciseSession
@@ -278,8 +275,7 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
             'duration_seconds',
             'score',
             'success',
-            'attempts_count',
-            'answers',
+            'attempt',
         ]
         read_only_fields = fields
 
