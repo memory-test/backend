@@ -28,11 +28,11 @@ jobs:
         run: |
           docker compose build \
             --progress=plain \
-            web
+            backend
           docker compose run \
             --user=root \
             --rm \
-            web python backend/manage.py check --deploy
+            backend python backend/manage.py check --deploy
 
 
   deploy:
