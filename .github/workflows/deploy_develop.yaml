@@ -23,8 +23,6 @@ jobs:
             -p 'CI_' > .env
 
       - name: 3. Build and run ci.sh
-        env:
-          DJANGO_ENV: development
         run: |
           docker compose build \
             --progress=plain \
@@ -32,7 +30,7 @@ jobs:
           docker compose run \
             --user=root \
             --rm \
-            backend python backend/manage.py check --deploy
+            backend python manage.py check --deploy
 
 
   deploy:
@@ -78,7 +76,7 @@ jobs:
           username: ${{ secrets.SSH_DEPLOY_USER }}
           key: ${{ secrets.SSH_DEPLOY_KEY }}
           overwrite: true
-          source: ".env,backend,gateway,docker-compose.yml"
+          source: ".env,backend,gateway,docker,docker-compose.yml"
           target: backend
           rm: true
 

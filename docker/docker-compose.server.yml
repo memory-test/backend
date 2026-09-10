@@ -30,9 +30,9 @@ services:
       db:
         condition: service_healthy
     command: >
-      bash -c "python backend/manage.py migrate --no-input &&
-      python backend/manage.py collectstatic --clear --no-input &&
-      { python backend/manage.py createsuperuser --no-input || echo 'superuser already exists'; }"
+      bash -c "python manage.py migrate --no-input &&
+      python manage.py collectstatic --clear --no-input &&
+      { python manage.py createsuperuser --no-input --name Admin || echo 'superuser already exists'; }"
 
   backend:
     depends_on:
