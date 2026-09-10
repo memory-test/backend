@@ -26,9 +26,7 @@ from authentication.models import EmailCode
 from exercises.models import Exercise
 from progress.models import ExerciseSession, UserAttempt
 
-from .registry import EXERCISE_REGISTRY
-from exercises.services import check_answer
-from progress.models import ExerciseSession, UserAnswer
+from .registry import EXERCISE_REGISTRY, ExerciseConfig
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from api.v1.schema.params import RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM
 
