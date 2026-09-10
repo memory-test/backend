@@ -211,3 +211,42 @@ DEFAULT_FROM_EMAIL = os.getenv(
 
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'console': {
+            'format': '%(asctime)s %(levelname)s %(name)s: %(message)s [in %(pathname)s:%(lineno)d]',
+        },
+    },
+    'handlers': {
+        # Always active — writes to stdout, which is what `docker logs` reads
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'console',
+            'level': 'DEBUG',
+        },
+    },
+    # Catch-all for project apps and third-party libraries. Without it their
+    # records reach a handler-less root logger and are dropped silently.
+    'root': {
+        'handlers': ['console'],
+        'level': DEBUG,
+    },
+    'loggers': {
+        # Django internals — pinned to INFO so LOG_LEVEL=DEBUG does not flood
+        # the console with autoreload and template chatter
+        'django': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # SQL queries — INFO to avoid flooding, switch to DEBUG when needed
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
