@@ -18,6 +18,7 @@ services:
       - static:/var/www/django/static
       - media:/var/www/django/media
       - ~/frontend/dist:/var/www/frontend
+      - acme-cache:/var/cache/nginx/acme
 
   migrate:
     image: ${APP_DOCKER_IMAGE}
@@ -52,3 +53,4 @@ volumes:
   django-media:
   caddy-config:
   caddy-data:
+  acme-cache:
