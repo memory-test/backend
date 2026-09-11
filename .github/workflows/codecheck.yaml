@@ -31,14 +31,14 @@ jobs:
 
       - name: 4. Create .env file for CI
         run: |
-          cp env.example .env
+          cp env.template .env
 
       - name: 5. Build and test
         run: |
           docker compose build \
             --progress=plain \
-            web
+            backend
           docker compose run \
             --user=root \
             --rm \
-            web python backend/manage.py check --deploy
+            backend python manage.py check --deploy
