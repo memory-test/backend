@@ -39,7 +39,8 @@ class ChoiceAnswerSerializer(AnswerBaseSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        # Если в контексте НЕТ флага show_correct — удаляем поле, чтобы студент его не подсмотрел
+        # Если в контексте НЕТ флага show_correct — удаляем поле,
+        # чтобы студент его не подсмотрел
         if not self.context.get('show_correct', False):
             data.pop('is_correct', None)
         return data
@@ -72,8 +73,7 @@ class BaseCheckSerializer(serializers.Serializer):
 
 class ChoiceCheckSerializer(BaseCheckSerializer):
     answers_ids = serializers.ListField(
-        child=serializers.IntegerField(),
-        allow_empty=False
+        child=serializers.IntegerField(), allow_empty=False
     )
 
     def validate(self, attrs):
@@ -83,17 +83,20 @@ class ChoiceCheckSerializer(BaseCheckSerializer):
         for answer_id in user_answers_ids:
             if answer_id not in allowed_ids:
                 raise serializers.ValidationError(
-                    {'answers_ids': f'Вариант ответа с ID {answer_id} не принадлежит данному заданию.'}
+                    {
+                        'answers_ids': (
+                            f'Вариант ответа с ID {answer_id} '
+                            'не принадлежит данному заданию.'
+                        )
+                    }
                 )
         attrs['answers_ids'] = user_answers_ids
         return attrs
 
 
-
 class ResultExerciseSerializer(serializers.Serializer):
     score = serializers.FloatField(required=True)
     success = serializers.BooleanField(required=True)
-
 
 
 class OrderingAnswerSerializer(AnswerBaseSerializer):
@@ -203,7 +206,7 @@ class HistoryListSerializer(serializers.ModelSerializer):
         source='exercise.title', read_only=True
     )
     exercise_type = serializers.CharField(
-        source='exercise.type', read_only=True
+        source='exercise.type.name', read_only=True
     )
 
     class Meta:
@@ -220,6 +223,7 @@ class HistoryListSerializer(serializers.ModelSerializer):
             'duration_seconds',
         ]
         read_only_fields = fields
+
 
 # TODO: изменить сериализатор под модель UserAttempt
 class AnswerDetailSerializer(serializers.ModelSerializer):
@@ -251,6 +255,7 @@ class AnswerDetailSerializer(serializers.ModelSerializer):
     def get_correct_answer(self, obj):
         return obj.answer_data.get('correct_answer')
 
+
 # TODO: изменить сериализатор под обновленную модель ExerciseSession
 class HistoryDetailSerializer(serializers.ModelSerializer):
     """Детальный просмотр прохождения упражнения (с ответами)."""
@@ -259,9 +264,9 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
         source='exercise.title', read_only=True
     )
     exercise_type = serializers.CharField(
-        source='exercise.type', read_only=True
+        source='exercise.type.name', read_only=True
     )
-    attempt = AnswerDetailSerializer(read_only=True)
+    answers = AnswerDetailSerializer(many=True, read_only=True)
 
     class Meta:
         model = ExerciseSession
@@ -275,7 +280,7 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
             'duration_seconds',
             'score',
             'success',
-            'attempt',
+            'answers',
         ]
         read_only_fields = fields
 
