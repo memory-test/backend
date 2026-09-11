@@ -1,0 +1,33 @@
+volumes:
+  pg_data:
+  static:
+  media:
+
+services:
+  db:
+    image: "postgres:17-alpine"
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready
+      interval: 5s
+      timeout: 30s
+      retries: 5
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${APP_DOCKER_IMAGE}
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      - db
+    volumes:
+      - static:/var/www/django/static
+      - media:/var/www/django/media
+
+
