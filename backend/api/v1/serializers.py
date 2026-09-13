@@ -261,6 +261,7 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = fields
 
+
 VERIFY_PURPOSES = (
     (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
     (EmailCode.Purpose.LOGIN, 'Вход'),
