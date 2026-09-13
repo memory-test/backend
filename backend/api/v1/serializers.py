@@ -203,7 +203,7 @@ class HistoryListSerializer(serializers.ModelSerializer):
         source='exercise.title', read_only=True
     )
     exercise_type = serializers.CharField(
-        source='exercise.type.name', read_only=True
+        source='exercise.type', read_only=True
     )
 
     class Meta:
@@ -218,43 +218,17 @@ class HistoryListSerializer(serializers.ModelSerializer):
             'started_at',
             'finished_at',
             'duration_seconds',
-            'attempts_count',
         ]
         read_only_fields = fields
 
-# TODO: изменить сериализатор под модель UserAttempt
-class AnswerDetailSerializer(serializers.ModelSerializer):
-    """Детальный просмотр ответа пользователя."""
-
-    question_text = serializers.SerializerMethodField()
-    user_answer = serializers.SerializerMethodField()
-    correct_answer = serializers.SerializerMethodField()
+class UserAttemptSerializer(serializers.ModelSerializer):
+    """Детальный просмотр попытки пользователя."""
 
     class Meta:
-        # изменил модель, чтобы успешно применить миграции.
         model = UserAttempt
-        fields = [
-            'id',
-            'question_text',
-            'user_answer',
-            'correct_answer',
-            'is_correct',
-            'response_time',
-        ]
+        fields = ['id', 'answer_data']
+        read_only_fields = fields
 
-    @extend_schema_field(OpenApiTypes.STR)
-    def get_question_text(self, obj):
-        return obj.answer_data.get('question_text', '')
-
-    @extend_schema_field(OpenApiTypes.OBJECT)
-    def get_user_answer(self, obj):
-        return obj.answer_data.get('user_answer')
-
-    @extend_schema_field(OpenApiTypes.OBJECT)
-    def get_correct_answer(self, obj):
-        return obj.answer_data.get('correct_answer')
-
-# TODO: изменить сериализатор под обновленную модель ExerciseSession
 class HistoryDetailSerializer(serializers.ModelSerializer):
     """Детальный просмотр прохождения упражнения (с ответами)."""
 
@@ -262,9 +236,9 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
         source='exercise.title', read_only=True
     )
     exercise_type = serializers.CharField(
-        source='exercise.type.name', read_only=True
+        source='exercise.type', read_only=True
     )
-    answers = AnswerDetailSerializer(many=True, read_only=True)
+    attempt = UserAttemptSerializer(read_only=True)
 
     class Meta:
         model = ExerciseSession
@@ -278,8 +252,7 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
             'duration_seconds',
             'score',
             'success',
-            'attempts_count',
-            'answers',
+            'attempt',
         ]
         read_only_fields = fields
 
