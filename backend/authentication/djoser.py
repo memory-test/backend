@@ -22,7 +22,12 @@ PASSWORD_STYLE = {'input_type': 'password'}
 
 
 class CodeUserSerializer(serializers.ModelSerializer):
-    """Профиль пользователя для /users/me/ (все поля только для чтения)."""
+    """Профиль пользователя для /users/me/.
+
+    GET возвращает профиль целиком; PATCH/PUT принимает
+    name, birth_date и current_difficulty. Смена email намеренно
+    не здесь, а через /users/set_email/ с подтверждением пароля.
+    """
 
     class Meta:
         model = User
@@ -36,7 +41,13 @@ class CodeUserSerializer(serializers.ModelSerializer):
             'is_active',
             'date_joined',
         )
-        read_only_fields = fields
+        read_only_fields = (
+            'id',
+            'email',
+            'role',
+            'is_active',
+            'date_joined',
+        )
 
 
 class CodeUserCreateSerializer(UserCreateMixin, serializers.ModelSerializer):

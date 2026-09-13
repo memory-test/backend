@@ -1,8 +1,11 @@
 from django.db import transaction
-from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
-from rest_framework import filters, status, generics
-from drf_spectacular.utils import extend_schema, inline_serializer
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import (
+    extend_schema,
+    extend_schema_view,
+    inline_serializer,
+)
 from rest_framework import filters, generics, status
 from rest_framework import serializers as drf_serializers
 from rest_framework.decorators import action
@@ -12,31 +15,37 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
 from api.filters import ExerciseFilter
+from api.v1.schema.params import (
+    RU_LIMIT_PARAM,
+    RU_ORDERING_PARAM,
+    RU_PAGE_PARAM,
+    RU_SEARCH_PARAM,
+)
 from api.v1.serializers import (
     CodeVerifySerializer,
     ExerciseFullSerializer,
-    ResultExerciseSerializer,
     ExerciseShortSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
     LoginCodeRequestSerializer,
+    ResultExerciseSerializer,
 )
 from authentication import services
 from authentication.models import EmailCode
 from exercises.models import Exercise
 from progress.models import ExerciseSession, UserAttempt
 
-from .registry import EXERCISE_REGISTRY
-from exercises.services import check_answer
-from progress.models import ExerciseSession, UserAnswer
-from drf_spectacular.utils import extend_schema, extend_schema_view
-from api.v1.schema.params import RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM
-
+from .registry import EXERCISE_REGISTRY, ExerciseConfig
 
 
 @extend_schema_view(
     list=extend_schema(
-        parameters=[RU_SEARCH_PARAM, RU_ORDERING_PARAM, RU_LIMIT_PARAM, RU_PAGE_PARAM],
+        parameters=[
+            RU_SEARCH_PARAM,
+            RU_ORDERING_PARAM,
+            RU_LIMIT_PARAM,
+            RU_PAGE_PARAM,
+        ],
     )
 )
 class ExerciseViewSet(ReadOnlyModelViewSet):
@@ -61,8 +70,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     def _get_config(self, exercise_id: int) -> ExerciseConfig:
         """Вспомогательный метод для получения конфигурации по id задания."""
         exercise_type = get_object_or_404(
-            Exercise.objects.values('type'),
-            id=exercise_id
+            Exercise.objects.values('type'), id=exercise_id
         )['type']
 
         config = EXERCISE_REGISTRY.get(exercise_type)
@@ -82,19 +90,16 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         serializer = config.write_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         clean_data = serializer.validated_data
-        task_result = config.service.check_answer(
-            exercise, clean_data
-        )
-        exercise_snapshot =ExerciseFullSerializer(
-            exercise,
-            context={'show_correct': True}
+        task_result = config.service.check_answer(exercise, clean_data)
+        exercise_snapshot = ExerciseFullSerializer(
+            exercise, context={'show_correct': True}
         ).data
         complete_attempt_data = {
-            "exercise_snapshot": exercise_snapshot,
-            "user_response": {
-                "user_choice": clean_data,
-                "result": task_result.success
-            }
+            'exercise_snapshot': exercise_snapshot,
+            'user_response': {
+                'user_choice': clean_data,
+                'result': task_result.success,
+            },
         }
 
         with transaction.atomic():
@@ -106,7 +111,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 finished_at=clean_data.get('finished_at'),
                 duration_seconds=clean_data.get('duration_seconds'),
                 success=task_result.success,
-                score=task_result.score
+                score=task_result.score,
             )
             UserAttempt.objects.create(
                 session=session,

@@ -262,6 +262,50 @@
             "url": "{{base_url}}/auth/users/me/",
             "description": "djoser. Профиль текущего пользователя. Токен подставляется автоматически из access_token."
           }
+        },
+        {
+          "name": "Обновить профиль",
+          "request": {
+            "method": "PATCH",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{access_token}}", "type": "string" }
+              ]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Новое имя\",\n  \"birth_date\": \"1995-03-01\",\n  \"current_difficulty\": \"hard\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/me/",
+            "description": "djoser. Обновление профиля: name, birth_date, current_difficulty (easy|medium|hard).\nВсе поля необязательны — передавайте только изменяемые. email/role не меняются здесь."
+          }
+        },
+        {
+          "name": "Сменить email",
+          "request": {
+            "method": "POST",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{access_token}}", "type": "string" }
+              ]
+            },
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"current_password\": \"{{password}}\",\n  \"new_email\": \"new-email@example.com\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{base_url}}/auth/users/set_email/",
+            "description": "djoser. Смена email (логина) — требует текущий пароль (в UI формы нужно поле «Текущий пароль»). После смены вход по новому email."
+          }
         }
       ]
     }

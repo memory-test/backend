@@ -20,6 +20,7 @@ RESET_CONFIRM = '/auth/users/reset_password_confirm/'
 TOKEN = '/auth/jwt/create/'
 REFRESH = '/auth/jwt/refresh/'
 ME = '/auth/users/me/'
+SET_EMAIL = '/auth/users/set_email/'
 LOCMEM = 'django.core.mail.backends.locmem.EmailBackend'
 PWD = 'Str0ng-Passw0rd-2026'
 
@@ -318,3 +319,71 @@ class AuthTests(TestCase):
         self.assertEqual(
             User.objects.get(email='carol@example.com').role, 'user'
         )
+
+    def test_me_patch_updates_profile_fields(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+        resp = self.client.patch(
+            f'{API}{ME}',
+            {
+                'name': 'Carol Updated',
+                'birth_date': '1995-03-01',
+                'current_difficulty': 'hard',
+            },
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        user = User.objects.get(email='carol@example.com')
+        self.assertEqual(user.name, 'Carol Updated')
+        self.assertEqual(str(user.birth_date), '1995-03-01')
+        self.assertEqual(user.current_difficulty, 'hard')
+        # ответ содержит полный профиль, а не только изменённые поля
+        self.assertEqual(resp.data['email'], 'carol@example.com')
+        self.assertIn('date_joined', resp.data)
+
+    def test_me_patch_ignores_read_only_fields(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+        resp = self.client.patch(
+            f'{API}{ME}',
+            {'email': 'hacker@example.com', 'role': 'admin'},
+            format='json',
+        )
+        self.assertEqual(resp.status_code, 200)
+        user = User.objects.get(email='carol@example.com')
+        self.assertEqual(user.email, 'carol@example.com')
+        self.assertEqual(user.role, 'user')
+
+    # --- смена email (djoser set_email) --------------------------------
+    def test_set_email_changes_login(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+        resp = self._post(
+            SET_EMAIL,
+            {
+                'current_password': PWD,
+                'new_email': 'carol-new@example.com',
+            },
+        )
+        self.assertEqual(resp.status_code, 204)
+        self.assertTrue(
+            User.objects.filter(email='carol-new@example.com').exists()
+        )
+        resp = self._post(
+            TOKEN,
+            {'email': 'carol-new@example.com', 'password': PWD},
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('access', resp.data)
+
+    def test_set_email_wrong_current_password(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+        resp = self._post(
+            SET_EMAIL,
+            {
+                'current_password': 'wrong',
+                'new_email': 'carol-new@example.com',
+            },
+        )
+        self.assertEqual(resp.status_code, 400)
