@@ -1,0 +1,307 @@
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
+from rest_framework import serializers
+
+from authentication.constants import CODE_LENGTH
+from authentication.models import EmailCode
+from exercises.models import (
+    ChoiceAnswer,
+    DrawingAnswer,
+    Exercise,
+    ExerciseType,
+    GroupingAnswer,
+    MatchingAnswer,
+    OrderingAnswer,
+)
+from progress.models import ExerciseSession, UserAttempt
+from users.constants import EMAIL_LENGTH
+
+
+class AnswerBaseSerializer(serializers.ModelSerializer):
+    """Сериализатор ответов с полями "текст" и "изображение".
+
+    Только для наследования, не применяется напрямую.
+    """
+
+    class Meta:
+        fields = (
+            'text',
+            'image',
+        )
+
+
+class ChoiceAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на выбор варианта(ов)."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = ChoiceAnswer
+        fields = AnswerBaseSerializer.Meta.fields + ('id', 'is_correct')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Если в контексте НЕТ флага show_correct — удаляем поле,
+        # чтобы студент его не подсмотрел
+        if not self.context.get('show_correct', False):
+            data.pop('is_correct', None)
+        return data
+
+
+class BaseCheckSerializer(serializers.Serializer):
+    started_at = serializers.DateTimeField(required=True)
+    finished_at = serializers.DateTimeField(required=True)
+    duration_seconds = serializers.IntegerField(required=True)
+
+    def validate(self, attrs):
+        """Проверяем согласованность даты начала и окончания задания."""
+        if attrs['started_at'] >= attrs['finished_at']:
+            raise serializers.ValidationError(
+                {
+                    'finished_at': (
+                        'Время окончания должно быть позже времени начала.'
+                    )
+                }
+            )
+        return attrs
+
+    def validate_duration_seconds(self, value):
+        if value < 0:
+            raise serializers.ValidationError(
+                'Продолжительность не может быть отрицательной.'
+            )
+        return value
+
+
+class ChoiceCheckSerializer(BaseCheckSerializer):
+    answers_ids = serializers.ListField(
+        child=serializers.IntegerField(), allow_empty=False
+    )
+
+    def validate(self, attrs):
+        exercise = self.context.get('exercise')
+        user_answers_ids = list(set(attrs.get('answers_ids')))
+        allowed_ids = [answer.id for answer in exercise.choiceanswers.all()]
+        for answer_id in user_answers_ids:
+            if answer_id not in allowed_ids:
+                raise serializers.ValidationError(
+                    {
+                        'answers_ids': (
+                            f'Вариант ответа с ID {answer_id} '
+                            'не принадлежит данному заданию.'
+                        )
+                    }
+                )
+        attrs['answers_ids'] = user_answers_ids
+        return attrs
+
+
+class ResultExerciseSerializer(serializers.Serializer):
+    score = serializers.FloatField(required=True)
+    success = serializers.BooleanField(required=True)
+
+
+class OrderingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на сортировку."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = OrderingAnswer
+
+
+class GroupingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на группировку."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = GroupingAnswer
+
+
+class MatchingAnswerSerializer(serializers.ModelSerializer):
+    """Сериализатор ответов на сопоставление."""
+
+    class Meta:
+        model = MatchingAnswer
+        fields = (
+            'first_text',
+            'first_image',
+            'second_text',
+            'second_image',
+        )
+
+
+class DrawingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор графических ответов."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = DrawingAnswer
+        fields = AnswerBaseSerializer.Meta.fields + (
+            'completion_only',
+            'additional_image',
+        )
+
+
+class ExerciseShortSerializer(serializers.ModelSerializer):
+    """Сериализатор краткого представления объектов класса Exercise.
+
+    Для использования при отображении списка заданий.
+    """
+
+    class Meta:
+        model = Exercise
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'is_active',
+            'created_at',
+        )
+
+
+class ExerciseFullSerializer(ExerciseShortSerializer):
+    """Сериализатор полного представления объектов класса Exercise."""
+
+    answers_info = serializers.SerializerMethodField(read_only=True)
+
+    ANSWER_SERIALIZERS = {
+        ExerciseType.CHOICE: ChoiceAnswerSerializer,
+        ExerciseType.ORDERING: OrderingAnswerSerializer,
+        ExerciseType.GROUPING: GroupingAnswerSerializer,
+        ExerciseType.MATCHING: MatchingAnswerSerializer,
+        ExerciseType.DRAWING: DrawingAnswerSerializer,
+    }
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_answers_info(self, obj: Exercise):
+        serializer_class = self.ANSWER_SERIALIZERS.get(obj.type)
+        if serializer_class is None:
+            return []
+        relation_name = obj.ANSWER_RELATIONS.get(obj.type)
+        answers = getattr(obj, relation_name).all()
+
+        return serializer_class(
+            answers,
+            many=True,
+            context=self.context,
+        ).data
+
+    class Meta(ExerciseShortSerializer.Meta):
+        fields = (
+            'id',
+            'title',
+            'description',
+            'type',
+            'difficulty',
+            'question',
+            'image',
+            'audio',
+            'is_active',
+            'created_at',
+            'answers_info',
+        )
+
+
+class HistoryListSerializer(serializers.ModelSerializer):
+    """Список краткой истории прохождения упражнений."""
+
+    exercise_title = serializers.CharField(
+        source='exercise.title', read_only=True
+    )
+    exercise_type = serializers.CharField(
+        source='exercise.type.name', read_only=True
+    )
+
+    class Meta:
+        model = ExerciseSession
+        fields = [
+            'id',
+            'exercise_title',
+            'exercise_type',
+            'difficulty',
+            'score',
+            'success',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+        ]
+        read_only_fields = fields
+
+
+# TODO: изменить сериализатор под модель UserAttempt
+class AnswerDetailSerializer(serializers.ModelSerializer):
+    """Детальный просмотр ответа пользователя."""
+
+    question_text = serializers.SerializerMethodField()
+    user_answer = serializers.SerializerMethodField()
+    correct_answer = serializers.SerializerMethodField()
+
+    class Meta:
+        # изменил модель, чтобы успешно применить миграции.
+        model = UserAttempt
+        fields = [
+            'id',
+            'question_text',
+            'user_answer',
+            'correct_answer',
+        ]
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_question_text(self, obj):
+        return obj.answer_data.get('question_text', '')
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_user_answer(self, obj):
+        return obj.answer_data.get('user_answer')
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
+    def get_correct_answer(self, obj):
+        return obj.answer_data.get('correct_answer')
+
+
+# TODO: изменить сериализатор под обновленную модель ExerciseSession
+class HistoryDetailSerializer(serializers.ModelSerializer):
+    """Детальный просмотр прохождения упражнения (с ответами)."""
+
+    exercise_title = serializers.CharField(
+        source='exercise.title', read_only=True
+    )
+    exercise_type = serializers.CharField(
+        source='exercise.type.name', read_only=True
+    )
+    answers = AnswerDetailSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = ExerciseSession
+        fields = [
+            'id',
+            'exercise_title',
+            'exercise_type',
+            'difficulty',
+            'started_at',
+            'finished_at',
+            'duration_seconds',
+            'score',
+            'success',
+            'answers',
+        ]
+        read_only_fields = fields
+
+
+VERIFY_PURPOSES = (
+    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
+    (EmailCode.Purpose.LOGIN, 'Вход'),
+)
+
+
+class LoginCodeRequestSerializer(serializers.Serializer):
+    """Запрос кода для входа (регистрация и сброс — эндпоинты djoser)."""
+
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
+
+
+class CodeVerifySerializer(serializers.Serializer):
+    """Подтверждение кода (регистрация / вход) — возвращает JWT."""
+
+    email = serializers.EmailField(max_length=EMAIL_LENGTH)
+    code = serializers.CharField(
+        max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
+    )
+    purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)

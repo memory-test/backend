@@ -1,0 +1,56 @@
+---
+# This compose-file is production only. So, it should not be called directly.
+#
+# Instead, it should be a part of your deployment strategy as additional file
+
+services:
+  gateway:
+    build: ./docker/gateway/
+    restart: unless-stopped
+    # Provides ACME_EMAIL / ACME_DOMAIN_NAME for envsubst in nginx.conf
+    env_file: .env
+    ports:
+      - 80:80
+      - 443:443
+    depends_on:
+      - backend
+    volumes:
+      - static:/var/www/django/static
+      - media:/var/www/django/media
+      - ~/frontend/dist:/var/www/frontend
+      - acme-cache:/var/cache/nginx/acme
+
+  migrate:
+    image: ${APP_DOCKER_IMAGE}
+    volumes:
+      - static:/var/www/django/static
+      - media:/var/www/django/media
+    env_file: .env
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      bash -c "python manage.py migrate --no-input &&
+      python manage.py collectstatic --clear --no-input &&
+      { python manage.py createsuperuser --no-input --name Admin || echo 'superuser already exists'; }"
+
+  backend:
+    depends_on:
+      - migrate
+
+  dozzle:
+    image: amir20/dozzle:latest
+    expose:
+      - 8080
+    environment:
+      - DOZZLE_BASE=/dozzle
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  django-media:
+  caddy-config:
+  caddy-data:
+  acme-cache:
