@@ -13,14 +13,12 @@ SECRET_KEY = os.getenv('SECRET_KEY', 'secrect')
 
 DEBUG = os.getenv('DEBUG', 'True') in ['True', '1']
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(
-    ','
-)
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
 
 CSRF_TRUSTED_ORIGINS = [f'https://{host}' for host in ALLOWED_HOSTS]
-CORS_ALLOWED_ORIGINS = os.getenv('CORS_ALLOWED_ORIGINS', 'http://127.0.0.1:5173,http://localhost:5173').split(
-    ','
-)
+CORS_ALLOWED_ORIGINS = os.getenv(
+    'CORS_ALLOWED_ORIGINS', 'http://127.0.0.1:5173,http://localhost:5173'
+).split(',')
 
 AUTH_USER_MODEL = 'users.User'
 
@@ -40,6 +38,7 @@ INSTALLED_APPS = [
     'django_filters',
     'djoser',
     'drf_spectacular',
+    'corsheaders',
     # Локальные приложения
     'authentication.apps.AuthenticationConfig',
     'users.apps.UsersConfig',
@@ -51,6 +50,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
