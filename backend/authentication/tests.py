@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import date, timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core import mail
@@ -7,6 +8,8 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from authentication.models import EmailCode
+from exercises.models import Exercise
+from progress.models import ExerciseSession
 
 User = get_user_model()
 
@@ -64,6 +67,29 @@ class AuthTests(TestCase):
             HTTP_AUTHORIZATION=f'Bearer {tok.data["access"]}'
         )
         return tok
+
+    def _exercise(self, title, is_active=True):
+        return Exercise.objects.create(
+            title=title,
+            description='Описание',
+            type='offline',
+            difficulty='easy',
+            question='Вопрос',
+            is_active=is_active,
+        )
+
+    def _session(self, user, exercise, success=True):
+        started_at = timezone.now()
+        return ExerciseSession.objects.create(
+            user=user,
+            exercise=exercise,
+            difficulty=exercise.difficulty,
+            started_at=started_at,
+            finished_at=started_at + timedelta(minutes=1),
+            duration_seconds=60,
+            success=success,
+            score=100 if success else 0,
+        )
 
     # --- регистрация (djoser) ------------------------------------------
     def test_register_creates_inactive_user_and_sends_code(self):
@@ -309,6 +335,105 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.data['email'], 'carol@example.com')
 
+    @patch('authentication.djoser.timezone.localdate')
+    def test_me_returns_age(self, localdate_mock):
+        localdate_mock.return_value = date(2026, 9, 16)
+        user = self._active_user()
+        user.birth_date = date(1990, 1, 1)
+        user.save(update_fields=['birth_date'])
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['age'], 36)
+
+    def test_me_returns_null_age_without_birth_date(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertIsNone(resp.data['age'])
+
+    @patch('authentication.djoser.timezone.localdate')
+    def test_me_age_before_and_after_birthday(self, localdate_mock):
+        localdate_mock.return_value = date(2026, 9, 16)
+        user = self._active_user()
+        self._auth('carol@example.com', PWD)
+
+        user.birth_date = date(2000, 9, 17)
+        user.save(update_fields=['birth_date'])
+        resp = self.client.get(f'{API}{ME}')
+        self.assertEqual(resp.data['age'], 25)
+
+        user.birth_date = date(2000, 9, 15)
+        user.save(update_fields=['birth_date'])
+        resp = self.client.get(f'{API}{ME}')
+        self.assertEqual(resp.data['age'], 26)
+
+    def test_me_progress_is_zero_without_active_exercises(self):
+        self._active_user()
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['progress_percent'], 0)
+
+    def test_me_progress_for_completed_active_exercises(self):
+        user = self._active_user()
+        exercises = [self._exercise(f'Задание {index}') for index in range(4)]
+        self._session(user, exercises[0])
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['progress_percent'], 25)
+
+    def test_me_progress_rounds_to_two_decimal_places(self):
+        user = self._active_user()
+        exercises = [self._exercise(f'Задание {index}') for index in range(3)]
+        self._session(user, exercises[0])
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['progress_percent'], 33.33)
+
+    def test_me_progress_counts_repeated_exercise_once(self):
+        user = self._active_user()
+        completed_exercise = self._exercise('Пройденное задание')
+        self._exercise('Непройденное задание')
+        self._session(user, completed_exercise)
+        self._session(user, completed_exercise)
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['progress_percent'], 50)
+
+    def test_me_progress_counts_unsuccessful_session(self):
+        user = self._active_user()
+        exercise = self._exercise('Неуспешно пройденное задание')
+        self._session(user, exercise, success=False)
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['progress_percent'], 100)
+
+    def test_me_progress_ignores_inactive_exercises(self):
+        user = self._active_user()
+        self._exercise('Активное задание')
+        inactive_exercise = self._exercise(
+            'Неактивное задание', is_active=False
+        )
+        self._session(user, inactive_exercise)
+        self._auth('carol@example.com', PWD)
+
+        resp = self.client.get(f'{API}{ME}')
+
+        self.assertEqual(resp.data['progress_percent'], 0)
+
     def test_me_role_is_read_only(self):
         self._active_user()
         self._auth('carol@example.com', PWD)
@@ -346,13 +471,20 @@ class AuthTests(TestCase):
         self._auth('carol@example.com', PWD)
         resp = self.client.patch(
             f'{API}{ME}',
-            {'email': 'hacker@example.com', 'role': 'admin'},
+            {
+                'email': 'hacker@example.com',
+                'role': 'admin',
+                'age': 99,
+                'progress_percent': 100,
+            },
             format='json',
         )
         self.assertEqual(resp.status_code, 200)
         user = User.objects.get(email='carol@example.com')
         self.assertEqual(user.email, 'carol@example.com')
         self.assertEqual(user.role, 'user')
+        self.assertIsNone(resp.data['age'])
+        self.assertEqual(resp.data['progress_percent'], 0)
 
     # --- смена email (djoser set_email) --------------------------------
     def test_set_email_changes_login(self):
