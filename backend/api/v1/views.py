@@ -137,7 +137,7 @@ class HistoryListView(generics.ListAPIView):
                 user=self.request.user,
                 finished_at__isnull=False,
             )
-            .select_related('exercise', 'exercise__type')
+            .select_related('exercise')
             .order_by('-finished_at')
         )
 
@@ -151,7 +151,7 @@ class HistoryDetailView(generics.RetrieveAPIView):
     def get_queryset(self):
         return ExerciseSession.objects.filter(
             user=self.request.user
-        ).prefetch_related('answers')
+        ).select_related('exercise', 'attempt')
 
 
 ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
