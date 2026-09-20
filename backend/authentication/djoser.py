@@ -8,10 +8,12 @@ authentication.services и подключается здесь через шта
 
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from djoser.email import ActivationEmail, PasswordResetEmail
 from djoser.serializers import UserCreateMixin
 from rest_framework import serializers
 
+from exercises.models import Exercise
 from users.constants import EMAIL_LENGTH
 from users.models import User
 
@@ -29,6 +31,34 @@ class CodeUserSerializer(serializers.ModelSerializer):
     не здесь, а через /users/set_email/ с подтверждением пароля.
     """
 
+    age = serializers.SerializerMethodField()
+    progress_percent = serializers.SerializerMethodField()
+
+    def get_age(self, obj):
+        if obj.birth_date is None:
+            return None
+        today = timezone.localdate()
+        birthday_has_passed = (today.month, today.day) >= (
+            obj.birth_date.month,
+            obj.birth_date.day,
+        )
+        return today.year - obj.birth_date.year - (not birthday_has_passed)
+
+    def get_progress_percent(self, obj):
+        total_count = Exercise.objects.filter(is_active=True).count()
+        if total_count == 0:
+            return 0
+        completed_count = (
+            obj.exercise_sessions.filter(
+                exercise__is_active=True,
+                finished_at__isnull=False,
+            )
+            .values('exercise_id')
+            .distinct()
+            .count()
+        )
+        return round(completed_count / total_count * 100, 2)
+
     class Meta:
         model = User
         fields = (
@@ -36,7 +66,9 @@ class CodeUserSerializer(serializers.ModelSerializer):
             'email',
             'name',
             'birth_date',
+            'age',
             'current_difficulty',
+            'progress_percent',
             'role',
             'is_active',
             'date_joined',
