@@ -1,5 +1,5 @@
-from drf_spectacular.utils import OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter
 
 RU_SEARCH_PARAM = OpenApiParameter(
     name='search',
@@ -11,7 +11,10 @@ RU_ORDERING_PARAM = OpenApiParameter(
     name='ordering',
     type=OpenApiTypes.STR,
     location=OpenApiParameter.QUERY,
-    description='Поле для сортировки результатов (например, `title` или `-created_at`).',
+    description=(
+        'Поле для сортировки результатов (например, `title` '
+        'или `-created_at`).'
+    ),
 )
 RU_LIMIT_PARAM = OpenApiParameter(
     name='limit',
