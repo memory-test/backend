@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from exercises.models import Exercise
@@ -27,7 +28,9 @@ class ExerciseSession(models.Model):
     )
     started_at = models.DateTimeField(verbose_name='Время начала')
     finished_at = models.DateTimeField(verbose_name='Время окончания')
-    duration_seconds = models.PositiveIntegerField(verbose_name='Длительность (сек)')
+    duration_seconds = models.PositiveIntegerField(
+        verbose_name='Длительность (сек)'
+    )
     success = models.BooleanField(verbose_name='Успешно выполнено')
     score = models.FloatField(verbose_name='Оценка')
 
@@ -44,7 +47,9 @@ class UserAttempt(models.Model):
         related_name='attempt',
         verbose_name='Сессия упражнения',
     )
-    answer_data = models.JSONField(verbose_name='Данные ответа (JSON)')
+    answer_data = models.JSONField(
+        verbose_name='Данные ответа (JSON)', encoder=DjangoJSONEncoder
+    )
 
     class Meta:
         verbose_name = 'Ответ пользователя'

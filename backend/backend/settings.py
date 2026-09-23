@@ -91,6 +91,11 @@ DATABASES = {
     }
 }
 
+GROK_API_KEY = os.getenv('GROK_API_KEY', '')
+
+GROK_MODEL = os.getenv('GROK_MODEL', '')
+
+GROK_BASE_URL = 'https://api.groq.com/openai/v1'
 
 AUTH_PASSWORD_VALIDATORS = [
     {

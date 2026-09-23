@@ -87,7 +87,9 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     def pass_exercise(self, request, pk=None):
         config = self._get_config(pk)
         exercise = config.service.get_exercise(pk)
-        serializer = config.write_serializer(data=request.data)
+        serializer = config.write_serializer(
+            data=request.data, context={'exercise': exercise}
+        )
         serializer.is_valid(raise_exception=True)
         clean_data = serializer.validated_data
         task_result = config.service.check_answer(exercise, clean_data)
@@ -105,7 +107,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         with transaction.atomic():
             session = ExerciseSession.objects.create(
                 user=request.user,
-                exercise_id=exercise,
+                exercise=exercise,
                 difficulty=exercise.difficulty,
                 started_at=clean_data.get('started_at'),
                 finished_at=clean_data.get('finished_at'),
@@ -117,7 +119,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 session=session,
                 answer_data=complete_attempt_data,
             )
-        return Response(ResultExerciseSerializer(task_result))
+        return Response(ResultExerciseSerializer(task_result).data)
 
 
 @extend_schema_view(

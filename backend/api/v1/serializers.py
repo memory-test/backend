@@ -282,3 +282,15 @@ class CodeVerifySerializer(serializers.Serializer):
         max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
     )
     purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)
+
+
+class InputCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа input.
+
+    Всегда список: для короткого ответа — список из одного элемента.
+    """
+
+    answers = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, trim_whitespace=False),
+        allow_empty=False,
+    )
