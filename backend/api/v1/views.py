@@ -69,13 +69,17 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
 
     def _get_config(self, exercise_id: int) -> ExerciseConfig:
         """Вспомогательный метод для получения конфигурации по id задания."""
-        exercise_type = get_object_or_404(
-            Exercise.objects.values('type'), id=exercise_id
-        )['type']
+        exercise = get_object_or_404(
+            Exercise.objects.only('type'),
+            id=exercise_id,
+        )
+        exercise_type = exercise.type
 
         config = EXERCISE_REGISTRY.get(exercise_type)
         if not config:
-            raise status.HTTP_400_BAD_REQUEST
+            raise drf_serializers.ValidationError(
+                {'detail': 'Этот тип задания пока не поддерживается.'}
+            )
         return config
 
     @action(
