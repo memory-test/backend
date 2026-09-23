@@ -1,3 +1,5 @@
+from typing import Any
+
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
@@ -24,7 +26,7 @@ class AnswerBaseSerializer(serializers.ModelSerializer):
     """
 
     class Meta:
-        fields = (
+        fields: tuple[str, ...] = (
             'text',
             'image',
         )
@@ -145,7 +147,7 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Exercise
-        fields = (
+        fields: tuple[str, ...] = (
             'id',
             'title',
             'description',
@@ -161,7 +163,10 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
 
     answers_info = serializers.SerializerMethodField(read_only=True)
 
-    ANSWER_SERIALIZERS = {
+    ANSWER_SERIALIZERS: dict[
+        str,
+        type[serializers.ModelSerializer[Any]],
+    ] = {
         ExerciseType.CHOICE: ChoiceAnswerSerializer,
         ExerciseType.ORDERING: OrderingAnswerSerializer,
         ExerciseType.GROUPING: GroupingAnswerSerializer,
@@ -175,6 +180,8 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         if serializer_class is None:
             return []
         relation_name = obj.ANSWER_RELATIONS.get(obj.type)
+        if relation_name is None:
+            return []
         answers = getattr(obj, relation_name).all()
 
         return serializer_class(
