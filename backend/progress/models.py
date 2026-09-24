@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models
 
 from exercises.models import Exercise
@@ -72,6 +73,7 @@ class UserAttempt(models.Model):
             'Полные данные попытки: снимок упражнения, ответ пользователя, '
             'результат проверки и метаданные (хранится в формате JSON).'
         ),
+        encoder=DjangoJSONEncoder,
     )
 
     class Meta:

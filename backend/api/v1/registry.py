@@ -19,4 +19,8 @@ EXERCISE_REGISTRY = {
         service=services.ChooseExerciseService(),
         write_serializer=serializers.ChoiceCheckSerializer,
     ),
+    ExerciseType.INPUT: ExerciseConfig(
+        service=services.InputExerciseService(),
+        write_serializer=serializers.InputCheckSerializer,
+    ),
 }

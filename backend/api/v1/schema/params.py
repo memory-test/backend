@@ -12,8 +12,8 @@ RU_ORDERING_PARAM = OpenApiParameter(
     type=OpenApiTypes.STR,
     location=OpenApiParameter.QUERY,
     description=(
-        'Поле для сортировки результатов (например, `title` '
-        'или `-created_at`).'
+        'Поле для сортировки результатов (например, `title` или '
+        '`-created_at`).'
     ),
 )
 RU_LIMIT_PARAM = OpenApiParameter(

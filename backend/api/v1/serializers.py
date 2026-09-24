@@ -14,15 +14,12 @@ from exercises.models import (
     Exercise,
     ExerciseType,
     GroupingAnswer,
+    InputAnswer,
     MatchingAnswer,
     OrderingAnswer,
 )
 from progress.models import ExerciseSession, UserAttempt
 from users.constants import EMAIL_LENGTH
-
-# ---------------------------------------------------------------------------
-# Сериализаторы ответов (для отображения answers_info)
-# ---------------------------------------------------------------------------
 
 
 class AnswerBaseSerializer(serializers.ModelSerializer):
@@ -141,19 +138,6 @@ class BaseCheckSerializer(serializers.Serializer):
         return value
 
 
-@extend_schema_serializer(
-    examples=[
-        OpenApiExample(
-            'Пример запроса (choice)',
-            value={
-                'started_at': '2026-09-07T14:30:00Z',
-                'finished_at': '2026-09-07T14:32:15Z',
-                'duration_seconds': 135,
-                'answers_ids': [101, 103],
-            },
-        ),
-    ],
-)
 class ChoiceCheckSerializer(BaseCheckSerializer):
     """Сериалайзер для проверки ответов типа choice."""
 
@@ -202,25 +186,41 @@ class ResultExerciseSerializer(serializers.Serializer):
     )
 
 
-@extend_schema_serializer(
-    examples=[
-        OpenApiExample(
-            'Элемент списка заданий',
-            value={
-                'id': 42,
-                'title': 'Запоминание слов',
-                'description': (
-                    'Запомните список слов, затем выберите те, что были в '
-                    'списке'
-                ),
-                'type': 'choice',
-                'difficulty': 'easy',
-                'is_active': True,
-                'created_at': '2026-09-07T14:15:30Z',
-            },
+class InputCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа input."""
+
+    answers = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, trim_whitespace=False),
+        allow_empty=False,
+        help_text=(
+            'Ответ(ы) пользователя. Формат зависит от check_method эталона.'
         ),
-    ],
-)
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        answer = exercise.inputanswers.first() if exercise else None
+        if answer is None:
+            raise serializers.ValidationError(
+                {'detail': 'Для задания не настроен эталонный ответ.'}
+            )
+
+        method = answer.check_method
+        if (
+            method
+            in (
+                InputAnswer.CheckMethod.SINGLE_ANSWER,
+                InputAnswer.CheckMethod.FREE_ANSWER,
+            )
+            and len(attrs['answers']) != 1
+        ):
+            raise serializers.ValidationError(
+                {'answers': 'Для этого задания нужен ровно один ответ.'}
+            )
+        return attrs
+
+
 class ExerciseShortSerializer(serializers.ModelSerializer):
     """Сериализатор краткого представления объектов класса Exercise.
 

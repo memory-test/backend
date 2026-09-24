@@ -105,12 +105,9 @@ class Exercise(models.Model):
             return True
         if not self.pk:
             return False
-
         relation_name = self.ANSWER_RELATIONS.get(self.type)
         if relation_name is None:
             return False
-        if self.type == 'input':
-            return hasattr(self, relation_name)
         return getattr(self, relation_name).exists()
 
     def clean(self):
@@ -187,16 +184,21 @@ class AnswerTextImageFields(Answer):
 
 
 class InputAnswer(Answer):
-    """Ответы с ручным вводом."""
+    """Эталонные ответы для заданий типа input."""
 
-    exercise = models.OneToOneField(
-        Exercise,
-        models.CASCADE,
-        verbose_name='Задание',
-        related_name='inputanswers',
+    class CheckMethod(models.TextChoices):
+        SINGLE_ANSWER = 'single_answer', 'Один ответ'
+        LIST_ANSWER = 'list_answer', 'Список ответов'
+        FREE_ANSWER = 'free_answer', 'Свободная форма (пока не реализовано)'
+
+    check_method = models.CharField(
+        'Способ проверки',
+        max_length=max(len(el) for el, _ in CheckMethod.choices),
+        choices=CheckMethod.choices,
+        default=CheckMethod.SINGLE_ANSWER,
     )
-    expected_text = models.TextField(
-        'Ожидаемый текст ответа', max_length=ANSWER_LIMIT
+    expected_text = models.CharField(
+        'Эталонный ответ', max_length=ANSWER_LIMIT
     )
 
 
