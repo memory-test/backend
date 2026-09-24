@@ -1,3 +1,4 @@
+import difflib
 import re
 import unicodedata
 from abc import ABC, abstractmethod
@@ -61,7 +62,36 @@ class ChooseExerciseService(AbstractExerciseService):
 
 
 class InputExerciseService(AbstractExerciseService):
-    """Тип input: один ответ или список слов."""
+    """Тип input: один ответ, список слов или свободная форма."""
+
+    FREE_SUCCESS_THRESHOLD = 60  # % схожести с эталоном
+
+    _STOP_WORDS = frozenset(
+        {
+            'и',
+            'а',
+            'но',
+            'не',
+            'что',
+            'как',
+            'это',
+            'то',
+            'в',
+            'на',
+            'с',
+            'по',
+            'для',
+            'из',
+            'к',
+            'у',
+            'о',
+            'от',
+            'до',
+            'же',
+            'бы',
+            'ли',
+        }
+    )
 
     def get_exercise(self, exercise_id: int) -> Exercise:
         """Достаёт задание вместе с эталонным ответом."""
@@ -75,10 +105,13 @@ class InputExerciseService(AbstractExerciseService):
         """Выбирает способ проверки по check_method эталона."""
         answers = list(exercise.inputanswers.all())
         user_items = user_answer_data.get('answers', [])
+        method = answers[0].check_method
 
-        if answers[0].check_method == InputAnswer.CheckMethod.SINGLE_ANSWER:
+        if method == InputAnswer.CheckMethod.SINGLE_ANSWER:
             return self._check_single(answers, user_items)
-        return self._check_list(answers, user_items)
+        if method == InputAnswer.CheckMethod.LIST_ANSWER:
+            return self._check_list(answers, user_items)
+        return self._check_free(answers, user_items)
 
     def _check_single(self, answers, user_items) -> EvaluationResult:
         """Сравнивает единственный ответ с эталоном."""
@@ -104,6 +137,35 @@ class InputExerciseService(AbstractExerciseService):
         score = round(matched / len(expected) * 100, 2)
         return EvaluationResult(success=matched == len(expected), score=score)
 
+    def _check_free(self, answers, user_items) -> EvaluationResult:
+        """Приблизительная оценка по доле совпадающих слов с эталоном,
+        без учёта коротких служебных слов."""
+        expected_words = self._drop_stop_words(
+            [
+                self._normalize(el)
+                for el in self._split_words(answers[0].expected_text)
+            ]
+        )
+        user_words = self._drop_stop_words(
+            [self._normalize(w) for w in self._split_words(user_items[0])]
+        )
+        if not expected_words or not user_words:
+            return EvaluationResult(success=False, score=0)
+
+        ratio = difflib.SequenceMatcher(
+            None, expected_words, user_words
+        ).ratio()
+        score = round(ratio * 100, 2)
+        return EvaluationResult(
+            success=score >= self.FREE_SUCCESS_THRESHOLD, score=score
+        )
+
+    @classmethod
+    def _drop_stop_words(cls, words: list[str]) -> list[str]:
+        """Убирает короткие служебные слова, чтобы они не завышали
+        схожесть между несвязанными по смыслу ответами."""
+        return [w for w in words if w not in cls._STOP_WORDS]
+
     @staticmethod
     def _split_words(raw: str) -> list[str]:
         """Режет строку на слова по запятым и/или пробелам."""
@@ -113,7 +175,7 @@ class InputExerciseService(AbstractExerciseService):
 
     @staticmethod
     def _normalize(value: str) -> str:
-        """Убирает регистр и пунктуацию для сравнения."""
+        """Убирает регистр и пунктуацию для сравнения слова."""
         if not value:
             return ''
         value = unicodedata.normalize('NFKC', value)

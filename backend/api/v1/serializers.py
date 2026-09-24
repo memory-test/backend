@@ -147,7 +147,6 @@ class InputCheckSerializer(BaseCheckSerializer):
     )
 
     def validate(self, attrs):
-        """Проверяет, что формат ответа подходит под check_method задания."""
         attrs = super().validate(attrs)
         exercise = self.context.get('exercise')
         answer = exercise.inputanswers.first() if exercise else None
@@ -157,12 +156,12 @@ class InputCheckSerializer(BaseCheckSerializer):
             )
 
         method = answer.check_method
-        if method == InputAnswer.CheckMethod.FREE_ANSWER:
-            raise serializers.ValidationError(
-                {'detail': 'Свободная форма ввода пока не реализована.'}
-            )
         if (
-            method == InputAnswer.CheckMethod.SINGLE_ANSWER
+            method
+            in (
+                InputAnswer.CheckMethod.SINGLE_ANSWER,
+                InputAnswer.CheckMethod.FREE_ANSWER,
+            )
             and len(attrs['answers']) != 1
         ):
             raise serializers.ValidationError(
