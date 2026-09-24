@@ -1,12 +1,9 @@
-import json
 import re
 import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from django.conf import settings
 from django.shortcuts import get_object_or_404
-from openai import OpenAI, OpenAIError
 
 from exercises.models import Exercise, InputAnswer
 
@@ -63,113 +60,11 @@ class ChooseExerciseService(AbstractExerciseService):
         return EvaluationResult(success=success, score=score)
 
 
-def _normalize_answer(value: str) -> str:
-    """Приводит ответ к каноническому виду: без регистра, лишних
-    пробелов и пунктуации."""
-    if not value:
-        return ''
-    value = unicodedata.normalize('NFKC', value)
-    value = value.strip().lower()
-    value = re.sub(r'[^\w\s]', '', value, flags=re.UNICODE)
-    return re.sub(r'\s+', ' ', value)
-
-
-@dataclass(frozen=True, slots=True)
-class GradingResult:
-    score: float  # 0..100
-    feedback: str = ''
-
-
-class AnswerGrader(ABC):
-    """Интерфейс LLM-проверки свободного ответа по критериям."""
-
-    @abstractmethod
-    def grade(
-        self, *, question: str, criteria: str, user_answer: str
-    ) -> GradingResult: ...
-
-
-class StubAnswerGrader(AnswerGrader):
-    """Заглушка: пересечение слов ответа и критериев. Используется
-    при отсутствии GROK_API_KEY или при сбое реального вызова."""
-
-    def grade(
-        self, *, question: str, criteria: str, user_answer: str
-    ) -> GradingResult:
-        user_words = set(_normalize_answer(user_answer).split())
-        criteria_words = set(_normalize_answer(criteria).split())
-        if not user_words or not criteria_words:
-            return GradingResult(
-                score=0.0, feedback='Пустой ответ или критерии.'
-            )
-        overlap = len(user_words & criteria_words) / len(criteria_words)
-        return GradingResult(
-            score=round(overlap * 100, 2),
-            feedback='Оценено заглушкой (пересечение слов), не LLM.',
-        )
-
-
-_GRADING_SYSTEM_PROMPT = (
-    'Ты проверяешь ответ ученика на задание тренажёра памяти. '
-    'Оцени ответ по переданным критериям и верни СТРОГО JSON без '
-    'какого-либо текста вокруг: {"score": <число от 0 до 100>, '
-    '"feedback": "<краткий комментарий на русском>"}.'
-)
-
-
-class GroqAnswerGrader(AnswerGrader):
-    """
-    LLM-проверка через Groq (OpenAI-совместимый API, llama-3.3-70b-versatile).
-    """
-
-    def __init__(self):
-        self._client = OpenAI(
-            api_key=settings.GROK_API_KEY, base_url=settings.GROK_BASE_URL
-        )
-
-    def grade(
-        self, *, question: str, criteria: str, user_answer: str
-    ) -> GradingResult:
-        user_prompt = (
-            f'Вопрос задания: {question}\n'
-            f'Критерии оценки: {criteria}\n'
-            f'Ответ ученика: {user_answer}'
-        )
-        try:
-            response = self._client.chat.completions.create(
-                model=settings.GROK_MODEL,
-                messages=[
-                    {'role': 'system', 'content': _GRADING_SYSTEM_PROMPT},
-                    {'role': 'user', 'content': user_prompt},
-                ],
-                temperature=0,
-                response_format={'type': 'json_object'},
-            )
-            payload = json.loads(response.choices[0].message.content)
-            score = float(payload['score'])
-            return GradingResult(
-                score=max(0.0, min(100.0, score)),
-                feedback=str(payload.get('feedback', '')),
-            )
-        except (OpenAIError, KeyError, ValueError, json.JSONDecodeError):
-            return StubAnswerGrader().grade(
-                question=question, criteria=criteria, user_answer=user_answer
-            )
-
-
 class InputExerciseService(AbstractExerciseService):
-    """Тип input: короткий ответ, список ответов или LLM-проверка.
-
-    Метод проверки берётся из InputAnswer.check_method (общий для
-    всех строк одного задания).
-    """
-
-    LLM_SUCCESS_THRESHOLD = 60
-    DEFAULT_GRADER: AnswerGrader = (
-        GroqAnswerGrader() if settings.GROK_API_KEY else StubAnswerGrader()
-    )
+    """Тип input: один ответ или список слов."""
 
     def get_exercise(self, exercise_id: int) -> Exercise:
+        """Достаёт задание вместе с эталонным ответом."""
         return get_object_or_404(
             Exercise.objects.prefetch_related('inputanswers'), id=exercise_id
         )
@@ -177,32 +72,50 @@ class InputExerciseService(AbstractExerciseService):
     def check_answer(
         self, exercise: Exercise, user_answer_data: dict
     ) -> EvaluationResult:
+        """Выбирает способ проверки по check_method эталона."""
         answers = list(exercise.inputanswers.all())
-        if not answers:
+        user_items = user_answer_data.get('answers', [])
+
+        if answers[0].check_method == InputAnswer.CheckMethod.SINGLE_ANSWER:
+            return self._check_single(answers, user_items)
+        return self._check_list(answers, user_items)
+
+    def _check_single(self, answers, user_items) -> EvaluationResult:
+        """Сравнивает единственный ответ с эталоном."""
+        expected = self._normalize(answers[0].expected_text)
+        success = self._normalize(user_items[0]) == expected
+        return EvaluationResult(success=success, score=100 if success else 0)
+
+    def _check_list(self, answers, user_items) -> EvaluationResult:
+        """Считает долю угаданных слов от общего числа эталонных."""
+        expected = {
+            self._normalize(el)
+            for el in self._split_words(answers[0].expected_text)
+        }
+        if not expected:
             return EvaluationResult(success=False, score=0)
 
-        user_items = [a for a in user_answer_data.get('answers', []) if a]
-        if not user_items:
-            return EvaluationResult(success=False, score=0)
+        user_words = []
+        for item in user_items:
+            user_words.extend(self._split_words(item))
+        user_set = {self._normalize(w) for w in user_words}
 
-        if answers[0].check_method == InputAnswer.CheckMethod.LLM:
-            return self._check_llm(exercise, answers[0], user_items)
-        return self._check_exact(answers, user_items)
-
-    def _check_exact(self, answers, user_items) -> EvaluationResult:
-        expected = {_normalize_answer(a.expected_text) for a in answers}
-        user_set = {_normalize_answer(a) for a in user_items}
         matched = len(expected & user_set)
         score = round(matched / len(expected) * 100, 2)
         return EvaluationResult(success=matched == len(expected), score=score)
 
-    def _check_llm(self, exercise, answer, user_items) -> EvaluationResult:
-        result = self.DEFAULT_GRADER.grade(
-            question=exercise.question,
-            criteria=answer.expected_text,
-            user_answer=' '.join(user_items),
-        )
-        return EvaluationResult(
-            success=result.score >= self.LLM_SUCCESS_THRESHOLD,
-            score=result.score,
-        )
+    @staticmethod
+    def _split_words(raw: str) -> list[str]:
+        """Режет строку на слова по запятым и/или пробелам."""
+        if not raw:
+            return []
+        return [part for part in re.split(r'[,\s]+', raw.strip()) if part]
+
+    @staticmethod
+    def _normalize(value: str) -> str:
+        """Убирает регистр и пунктуацию для сравнения."""
+        if not value:
+            return ''
+        value = unicodedata.normalize('NFKC', value)
+        value = value.strip().lower()
+        return re.sub(r'[^\w]', '', value, flags=re.UNICODE)

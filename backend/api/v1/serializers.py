@@ -10,6 +10,7 @@ from exercises.models import (
     Exercise,
     ExerciseType,
     GroupingAnswer,
+    InputAnswer,
     MatchingAnswer,
     OrderingAnswer,
 )
@@ -135,6 +136,39 @@ class DrawingAnswerSerializer(AnswerBaseSerializer):
             'completion_only',
             'additional_image',
         )
+
+
+class InputCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа input."""
+
+    answers = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, trim_whitespace=False),
+        allow_empty=False,
+    )
+
+    def validate(self, attrs):
+        """Проверяет, что формат ответа подходит под check_method задания."""
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        answer = exercise.inputanswers.first() if exercise else None
+        if answer is None:
+            raise serializers.ValidationError(
+                {'detail': 'Для задания не настроен эталонный ответ.'}
+            )
+
+        method = answer.check_method
+        if method == InputAnswer.CheckMethod.FREE_ANSWER:
+            raise serializers.ValidationError(
+                {'detail': 'Свободная форма ввода пока не реализована.'}
+            )
+        if (
+            method == InputAnswer.CheckMethod.SINGLE_ANSWER
+            and len(attrs['answers']) != 1
+        ):
+            raise serializers.ValidationError(
+                {'answers': 'Для этого задания нужен ровно один ответ.'}
+            )
+        return attrs
 
 
 class ExerciseShortSerializer(serializers.ModelSerializer):
@@ -282,15 +316,3 @@ class CodeVerifySerializer(serializers.Serializer):
         max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
     )
     purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)
-
-
-class InputCheckSerializer(BaseCheckSerializer):
-    """Сериалайзер для проверки ответов типа input.
-
-    Всегда список: для короткого ответа — список из одного элемента.
-    """
-
-    answers = serializers.ListField(
-        child=serializers.CharField(allow_blank=False, trim_whitespace=False),
-        allow_empty=False,
-    )

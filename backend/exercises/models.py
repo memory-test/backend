@@ -139,26 +139,21 @@ class AnswerTextImageFields(Answer):
 
 
 class InputAnswer(Answer):
-    """Ответы с ручным вводом."""
+    """Эталонные ответы для заданий типа input."""
 
     class CheckMethod(models.TextChoices):
-        EXACT = 'exact', 'Точное сравнение'
-        LLM = 'llm', 'LLM по критериям'
+        SINGLE_ANSWER = 'single_answer', 'Один ответ'
+        LIST_ANSWER = 'list_answer', 'Список ответов'
+        FREE_ANSWER = 'free_answer', 'Свободная форма (пока не реализовано)'
 
     check_method = models.CharField(
-        'Метод проверки',
-        max_length=20,
+        'Способ проверки',
+        max_length=max(len(el) for el, _ in CheckMethod.choices),
         choices=CheckMethod.choices,
-        default=CheckMethod.EXACT,
+        default=CheckMethod.SINGLE_ANSWER,
     )
-    expected_text = models.TextField(
-        'Эталонный ответ',
-        max_length=ANSWER_LIMIT,
-        help_text=(
-            'Для exact — допустимый ответ (несколько строк на задание '
-            'разрешены, для списка ответов). Для llm — критерии/рубрика, '
-            'по которым оценивается ответ.'
-        ),
+    expected_text = models.CharField(
+        'Эталонный ответ', max_length=ANSWER_LIMIT
     )
 
 
