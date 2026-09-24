@@ -10,6 +10,7 @@ from exercises.models import (
     Exercise,
     ExerciseType,
     GroupingAnswer,
+    InputAnswer,
     MatchingAnswer,
     OrderingAnswer,
 )
@@ -135,6 +136,38 @@ class DrawingAnswerSerializer(AnswerBaseSerializer):
             'completion_only',
             'additional_image',
         )
+
+
+class InputCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа input."""
+
+    answers = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, trim_whitespace=False),
+        allow_empty=False,
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        answer = exercise.inputanswers.first() if exercise else None
+        if answer is None:
+            raise serializers.ValidationError(
+                {'detail': 'Для задания не настроен эталонный ответ.'}
+            )
+
+        method = answer.check_method
+        if (
+            method
+            in (
+                InputAnswer.CheckMethod.SINGLE_ANSWER,
+                InputAnswer.CheckMethod.FREE_ANSWER,
+            )
+            and len(attrs['answers']) != 1
+        ):
+            raise serializers.ValidationError(
+                {'answers': 'Для этого задания нужен ровно один ответ.'}
+            )
+        return attrs
 
 
 class ExerciseShortSerializer(serializers.ModelSerializer):
