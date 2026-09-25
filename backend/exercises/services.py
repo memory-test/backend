@@ -64,7 +64,7 @@ class ChooseExerciseService(AbstractExerciseService):
 class InputExerciseService(AbstractExerciseService):
     """Тип input: один ответ, список слов или свободная форма."""
 
-    FREE_SUCCESS_THRESHOLD = 60  # % схожести с эталоном
+    FREE_SUCCESS_THRESHOLD = 60
 
     _STOP_WORDS = frozenset(
         {

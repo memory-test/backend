@@ -2,6 +2,9 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import (
+    OpenApiExample,
+    OpenApiResponse,
+    PolymorphicProxySerializer,
     extend_schema,
     extend_schema_view,
     inline_serializer,
@@ -22,11 +25,13 @@ from api.v1.schema.params import (
     RU_SEARCH_PARAM,
 )
 from api.v1.serializers import (
+    ChoiceCheckSerializer,
     CodeVerifySerializer,
     ExerciseFullSerializer,
     ExerciseShortSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
+    InputCheckSerializer,
     LoginCodeRequestSerializer,
     ResultExerciseSerializer,
 )
@@ -40,13 +45,25 @@ from .registry import EXERCISE_REGISTRY, ExerciseConfig
 
 @extend_schema_view(
     list=extend_schema(
+        summary='Список заданий',
+        description=(
+            'Возвращает пагинированный список активных заданий с '
+            'фильтрацией по типу, сложности и поиском по названию.'
+        ),
         parameters=[
             RU_SEARCH_PARAM,
             RU_ORDERING_PARAM,
             RU_LIMIT_PARAM,
             RU_PAGE_PARAM,
         ],
-    )
+    ),
+    retrieve=extend_schema(
+        summary='Детальное задание',
+        description=(
+            'Возвращает полное описание задания со всеми ответами '
+            '(без пометки правильности, если запрос от студента).'
+        ),
+    ),
 )
 class ExerciseViewSet(ReadOnlyModelViewSet):
     """Вьюсет для чтения объектов модели Exercise."""
@@ -75,9 +92,99 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
 
         config = EXERCISE_REGISTRY.get(exercise_type)
         if not config:
-            raise status.HTTP_400_BAD_REQUEST
+            raise drf_serializers.ValidationError(
+                {'type': f'Тип задания "{exercise_type}" не поддерживается.'}
+            )
+
         return config
 
+    @extend_schema(
+        summary='Прохождение задания',
+        description=(
+            'Принимает ответ пользователя, проверяет его и сохраняет '
+            'результат. Тело запроса зависит от типа задания: choice — '
+            'ChoiceCheckSerializer (answers_ids), input — '
+            'InputCheckSerializer (answers). Возвращает оценку и признак '
+            'успешности.'
+        ),
+        request=PolymorphicProxySerializer(
+            component_name='PassRequest',
+            serializers=[ChoiceCheckSerializer, InputCheckSerializer],
+            resource_type_field_name=None,
+        ),
+        examples=[
+            OpenApiExample(
+                'Пример запроса (choice)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:32:15Z',
+                    'duration_seconds': 135,
+                    'answers_ids': [101, 103],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Пример запроса (input, один ответ)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:30:10Z',
+                    'duration_seconds': 10,
+                    'answers': ['Париж'],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Пример запроса (input, список ответов)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:30:15Z',
+                    'duration_seconds': 15,
+                    'answers': ['Стол', 'Окно', 'Дверь', 'Лампа'],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Пример запроса (input, свободная форма)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:30:20Z',
+                    'duration_seconds': 20,
+                    'answers': [
+                        'Нужно не торопиться, тогда быстрее дойдёшь до цели'
+                    ],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Результат прохождения',
+                value={'score': 0.67, 'success': False},
+                response_only=True,
+            ),
+        ],
+        responses={
+            200: ResultExerciseSerializer,
+            400: OpenApiResponse(
+                response={
+                    'type': 'object',
+                    'description': (
+                        'Ошибка валидации: либо {"detail": "..."} — общая '
+                        'ошибка, либо {"<поле>": ["..."]} — ошибка '
+                        'конкретного поля (answers_ids, answers).'
+                    ),
+                    'properties': {'detail': {'type': 'string'}},
+                    'additionalProperties': {
+                        'type': 'array',
+                        'items': {'type': 'string'},
+                    },
+                },
+                description='Ошибка валидации',
+            ),
+            404: inline_serializer(
+                'PassExerciseNotFound',
+                {'detail': drf_serializers.CharField()},
+            ),
+        },
+    )
     @action(
         detail=True,
         methods=['post'],
@@ -124,6 +231,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
 
 @extend_schema_view(
     list=extend_schema(
+        summary='История прохождения — список',
+        description=(
+            'Возвращает пагинированный список завершённых сессий '
+            'пользователя с краткой информацией.'
+        ),
         parameters=[RU_LIMIT_PARAM, RU_PAGE_PARAM],
     ),
 )
@@ -144,6 +256,13 @@ class HistoryListView(generics.ListAPIView):
         )
 
 
+@extend_schema(
+    summary='История прохождения — детали',
+    description=(
+        'Возвращает детальную информацию о конкретной сессии: метаданные, '
+        'оценку и полные данные попытки (answer_data).'
+    ),
+)
 class HistoryDetailView(generics.RetrieveAPIView):
     """История прохождения. Детальный просмотр ответов."""
 
@@ -165,6 +284,11 @@ _VERIFY_CODE_HANDLERS = {
 
 
 @extend_schema(
+    summary='Запрос кода для входа',
+    description=(
+        'Отправляет код подтверждения на email. Ответ всегда одинаковый '
+        '(анти-enumeration): если аккаунт существует, код отправлен.'
+    ),
     request=LoginCodeRequestSerializer,
     responses={
         200: inline_serializer(
@@ -196,6 +320,12 @@ class LoginCodeRequestView(APIView):
 
 
 @extend_schema(
+    summary='Подтверждение кода и получение JWT',
+    description=(
+        'Проверяет код подтверждения и возвращает пару '
+        "access/refresh JWT-токенов. purpose='registration' — завершение "
+        "регистрации, purpose='login' — вход по коду."
+    ),
     request=CodeVerifySerializer,
     responses={
         200: inline_serializer(
