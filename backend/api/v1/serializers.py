@@ -1,3 +1,6 @@
+import random
+from dataclasses import dataclass
+
 from drf_spectacular.utils import (
     OpenApiExample,
     OpenApiTypes,
@@ -15,7 +18,6 @@ from exercises.models import (
     ExerciseType,
     GroupingAnswer,
     InputAnswer,
-    MatchingAnswer,
     OrderingAnswer,
 )
 from progress.models import ExerciseSession, UserAttempt
@@ -74,20 +76,6 @@ class GroupingAnswerSerializer(AnswerBaseSerializer):
     class Meta(AnswerBaseSerializer.Meta):
         model = GroupingAnswer
         fields = AnswerBaseSerializer.Meta.fields + ('id', 'group')
-
-
-class MatchingAnswerSerializer(serializers.ModelSerializer):
-    """Сериализатор ответов на сопоставление."""
-
-    class Meta:
-        model = MatchingAnswer
-        fields = (
-            'id',
-            'first_text',
-            'first_image',
-            'second_text',
-            'second_image',
-        )
 
 
 class DrawingAnswerSerializer(AnswerBaseSerializer):
@@ -162,6 +150,103 @@ class ChoiceCheckSerializer(BaseCheckSerializer):
                     }
                 )
         attrs['answers_ids'] = user_answers_ids
+        return attrs
+
+
+@dataclass
+class MatchingCard:
+    """Единообразное представление одной карточки — что для левой,
+    что для правой стороны, хотя в MatchingAnswer поля называются
+    по-разному (first_*/second_*)."""
+
+    id: int
+    text: str | None
+    image: object  # ImageFieldFile или None
+
+
+class MatchingCardSerializer(serializers.Serializer):
+    """Одна карточка для сопоставления: id, текст и/или картинка."""
+
+    id = serializers.IntegerField()
+    text = serializers.CharField(allow_null=True)
+    image = serializers.SerializerMethodField()
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_image(self, obj: MatchingCard):
+        return obj.image.url if obj.image else None
+
+
+class MatchingAnswerSerializer(serializers.Serializer):
+    """Левые и правые карточки для matching, раздельно и без связи
+    между ними — иначе пары были бы видны заранее."""
+
+    left = serializers.SerializerMethodField()
+    right = serializers.SerializerMethodField()
+
+    def get_left(self, pairs):
+        cards = [
+            MatchingCard(p.id, p.first_text or None, p.first_image)
+            for p in pairs
+        ]
+        return MatchingCardSerializer(cards, many=True).data
+
+    def get_right(self, pairs):
+        cards = [
+            MatchingCard(p.id, p.second_text or None, p.second_image)
+            for p in pairs
+        ]
+        random.shuffle(cards)
+        return MatchingCardSerializer(cards, many=True).data
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Пример запроса (matching)',
+            value={
+                'started_at': '2026-09-07T14:30:00Z',
+                'finished_at': '2026-09-07T14:30:30Z',
+                'duration_seconds': 30,
+                'pairs': [
+                    {'first_id': 1, 'second_id': 1},
+                    {'first_id': 2, 'second_id': 2},
+                ],
+            },
+        ),
+    ],
+)
+class MatchingCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа matching."""
+
+    pairs = serializers.ListField(
+        child=serializers.DictField(child=serializers.IntegerField()),
+        allow_empty=False,
+        help_text=(
+            'Список пар вида {"first_id": <id>, "second_id": <id>} — '
+            'id карточек из левого и правого списков (answers_info).'
+        ),
+    )
+
+    def validate_pairs(self, value):
+        for pair in value:
+            if set(pair.keys()) != {'first_id', 'second_id'}:
+                raise serializers.ValidationError(
+                    'Каждая пара должна содержать поля first_id и second_id.'
+                )
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        allowed_ids = {a.id for a in exercise.matchinganswers.all()}
+        for pair in attrs['pairs']:
+            if (
+                pair['first_id'] not in allowed_ids
+                or pair['second_id'] not in allowed_ids
+            ):
+                raise serializers.ValidationError(
+                    {'pairs': 'Элемент пары не принадлежит данному заданию.'}
+                )
         return attrs
 
 
@@ -271,7 +356,16 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
 class ExerciseFullSerializer(ExerciseShortSerializer):
     """Сериализатор полного представления объектов класса Exercise."""
 
-    answers_info = serializers.SerializerMethodField(read_only=True)
+    answers_info = serializers.SerializerMethodField(
+        read_only=True,
+        help_text=(
+            'Для choice/ordering/grouping/drawing — список вариантов '
+            'ответа. Для matching — {"left": [...], "right": [...]}, '
+            'каждая карточка: {"id", "text", "image"} (карточки '
+            'раздельно, правая колонка перемешана). Для input — всегда '
+            'пустой список (эталон скрыт).'
+        ),
+    )
 
     ANSWER_SERIALIZERS = {
         ExerciseType.CHOICE: ChoiceAnswerSerializer,
@@ -281,7 +375,7 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         ExerciseType.DRAWING: DrawingAnswerSerializer,
     }
 
-    @extend_schema_field(ChoiceAnswerSerializer(many=True))
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_answers_info(self, obj: Exercise):
         serializer_class = self.ANSWER_SERIALIZERS.get(obj.type)
         if serializer_class is None:
@@ -289,9 +383,10 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         relation_name = obj.ANSWER_RELATIONS.get(obj.type)
         answers = getattr(obj, relation_name).all()
 
+        many = obj.type != ExerciseType.MATCHING
         return serializer_class(
             answers,
-            many=True,
+            many=many,
             context=self.context,
         ).data
 

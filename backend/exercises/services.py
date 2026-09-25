@@ -181,3 +181,29 @@ class InputExerciseService(AbstractExerciseService):
         value = unicodedata.normalize('NFKC', value)
         value = value.strip().lower()
         return re.sub(r'[^\w]', '', value, flags=re.UNICODE)
+
+
+class MatchingExerciseService(AbstractExerciseService):
+    """Тип matching: сопоставление пар (текстовые карточки)."""
+
+    def get_exercise(self, exercise_id: int) -> Exercise:
+        return get_object_or_404(
+            Exercise.objects.prefetch_related('matchinganswers'),
+            id=exercise_id,
+        )
+
+    def check_answer(
+        self, exercise: Exercise, user_answer_data: dict
+    ) -> EvaluationResult:
+        total = exercise.matchinganswers.count()
+        if not total:
+            return EvaluationResult(success=False, score=0)
+
+        submitted_pairs = user_answer_data.get('pairs', [])
+        correct_ids = {
+            p['first_id']
+            for p in submitted_pairs
+            if p['first_id'] == p['second_id']
+        }
+        score = round(len(correct_ids) / total * 100, 2)
+        return EvaluationResult(success=len(correct_ids) == total, score=score)
