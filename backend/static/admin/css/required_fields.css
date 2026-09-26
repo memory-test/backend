@@ -1,0 +1,7 @@
+.required label::after,
+label.required::after,
+thead th.required::after {
+    content: " *";
+    color: #ba2121;
+    font-weight: bold;
+}
