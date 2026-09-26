@@ -1,8 +1,13 @@
-from random import shuffle
+import random
+from dataclasses import dataclass
 from typing import Any
 
 from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.utils import (
+    OpenApiExample,
+    extend_schema_field,
+    extend_schema_serializer,
+)
 from rest_framework import serializers
 
 from authentication.constants import CODE_LENGTH
@@ -13,15 +18,20 @@ from exercises.models import (
     Exercise,
     ExerciseType,
     GroupingAnswer,
-    MatchingAnswer,
+    InputAnswer,
     OrderingAnswer,
 )
 from progress.models import ExerciseSession, UserAttempt
 from users.constants import EMAIL_LENGTH
 
+VERIFY_PURPOSES = (
+    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
+    (EmailCode.Purpose.LOGIN, 'Вход'),
+)
+
 
 class AnswerBaseSerializer(serializers.ModelSerializer):
-    """Сериализатор ответов с полями "текст" и "изображение".
+    """Базовый сериализатор ответов с полями «текст» и «изображение».
 
     Только для наследования, не применяется напрямую.
     """
@@ -36,23 +46,79 @@ class AnswerBaseSerializer(serializers.ModelSerializer):
 class ChoiceAnswerSerializer(AnswerBaseSerializer):
     """Сериализатор ответов на выбор варианта(ов)."""
 
+    is_correct = serializers.SerializerMethodField(
+        help_text=(
+            'Признак правильности варианта (используется при проверке и '
+            'показе эталона).'
+        ),
+    )
+
     class Meta(AnswerBaseSerializer.Meta):
         model = ChoiceAnswer
         fields = AnswerBaseSerializer.Meta.fields + ('id', 'is_correct')
 
+    @extend_schema_field(OpenApiTypes.BOOL)
+    def get_is_correct(self, obj):
+        return obj.is_correct
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        # Если в контексте НЕТ флага show_correct — удаляем поле,
-        # чтобы студент его не подсмотрел
         if not self.context.get('show_correct', False):
             data.pop('is_correct', None)
         return data
 
 
+class OrderingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на сортировку."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = OrderingAnswer
+        fields = AnswerBaseSerializer.Meta.fields + ('id', 'position')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        if not self.context.get('show_correct', False):
+            data.pop('position', None)
+
+        return data
+
+
+class GroupingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор ответов на группировку."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = GroupingAnswer
+        fields = AnswerBaseSerializer.Meta.fields + ('id', 'group')
+
+
+class DrawingAnswerSerializer(AnswerBaseSerializer):
+    """Сериализатор графических ответов."""
+
+    class Meta(AnswerBaseSerializer.Meta):
+        model = DrawingAnswer
+        fields = AnswerBaseSerializer.Meta.fields + (
+            'id',
+            'completion_only',
+            'additional_image',
+        )
+
+
 class BaseCheckSerializer(serializers.Serializer):
-    started_at = serializers.DateTimeField(required=True)
-    finished_at = serializers.DateTimeField(required=True)
-    duration_seconds = serializers.IntegerField(required=True)
+    """Базовый сериализатор для проверки ответов с метаданными времени."""
+
+    started_at = serializers.DateTimeField(
+        required=True,
+        help_text='Время начала выполнения задания (ISO 8601)',
+    )
+    finished_at = serializers.DateTimeField(
+        required=True,
+        help_text='Время окончания выполнения задания (ISO 8601)',
+    )
+    duration_seconds = serializers.IntegerField(
+        required=True,
+        help_text='Длительность выполнения в секундах',
+    )
 
     def validate(self, attrs):
         """Проверяем согласованность даты начала и окончания задания."""
@@ -75,47 +141,31 @@ class BaseCheckSerializer(serializers.Serializer):
 
 
 class ChoiceCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа choice."""
+
     answers_ids = serializers.ListField(
-        child=serializers.IntegerField(), allow_empty=False
+        child=serializers.IntegerField(),
+        allow_empty=False,
+        help_text='Список ID выбранных вариантов ответа (из answers_info)',
     )
 
     def validate(self, attrs):
+        """Проверяет, что все выбранные id принадлежат этому заданию."""
         exercise = self.context.get('exercise')
-        user_answers_ids = list(set(attrs.get('answers_ids')))
-        allowed_ids = [answer.id for answer in exercise.choiceanswers.all()]
-        for answer_id in user_answers_ids:
-            if answer_id not in allowed_ids:
-                raise serializers.ValidationError(
-                    {
-                        'answers_ids': (
-                            f'Вариант ответа с ID {answer_id} '
-                            'не принадлежит данному заданию.'
-                        )
-                    }
-                )
-        attrs['answers_ids'] = user_answers_ids
+        user_answers_ids = set(attrs.get('answers_ids'))
+        allowed_ids = {answer.id for answer in exercise.choiceanswers.all()}
+        invalid_ids = user_answers_ids - allowed_ids
+        if invalid_ids:
+            raise serializers.ValidationError(
+                {
+                    'answers_ids': (
+                        f'Варианты ответа с ID {sorted(invalid_ids)} '
+                        'не принадлежат данному заданию.'
+                    )
+                }
+            )
+        attrs['answers_ids'] = list(user_answers_ids)
         return attrs
-
-
-class ResultExerciseSerializer(serializers.Serializer):
-    score = serializers.FloatField(required=True)
-    success = serializers.BooleanField(required=True)
-
-
-class OrderingAnswerSerializer(AnswerBaseSerializer):
-    """Сериализатор ответов на сортировку."""
-
-    class Meta(AnswerBaseSerializer.Meta):
-        model = OrderingAnswer
-        fields = AnswerBaseSerializer.Meta.fields + ('id', 'position')
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-
-        if not self.context.get('show_correct', False):
-            data.pop('position', None)
-
-        return data
 
 
 class OrderingCheckSerializer(BaseCheckSerializer):
@@ -152,35 +202,157 @@ class OrderingCheckSerializer(BaseCheckSerializer):
         return attrs
 
 
-class GroupingAnswerSerializer(AnswerBaseSerializer):
-    """Сериализатор ответов на группировку."""
+@dataclass
+class MatchingCard:
+    """Единообразное представление одной карточки — что для левой,
+    что для правой стороны, хотя в MatchingAnswer поля называются
+    по-разному (first_*/second_*)."""
 
-    class Meta(AnswerBaseSerializer.Meta):
-        model = GroupingAnswer
-
-
-class MatchingAnswerSerializer(serializers.ModelSerializer):
-    """Сериализатор ответов на сопоставление."""
-
-    class Meta:
-        model = MatchingAnswer
-        fields = (
-            'first_text',
-            'first_image',
-            'second_text',
-            'second_image',
-        )
+    id: int
+    text: str | None
+    image: object  # ImageFieldFile или None
 
 
-class DrawingAnswerSerializer(AnswerBaseSerializer):
-    """Сериализатор графических ответов."""
+class MatchingCardSerializer(serializers.Serializer):
+    """Одна карточка для сопоставления: id, текст и/или картинка."""
 
-    class Meta(AnswerBaseSerializer.Meta):
-        model = DrawingAnswer
-        fields = AnswerBaseSerializer.Meta.fields + (
-            'completion_only',
-            'additional_image',
-        )
+    id = serializers.IntegerField()
+    text = serializers.CharField(allow_null=True)
+    image = serializers.SerializerMethodField()
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_image(self, obj: MatchingCard):
+        return obj.image.url if obj.image else None
+
+
+class MatchingAnswerSerializer(serializers.Serializer):
+    """Левые и правые карточки для matching, раздельно и без связи
+    между ними — иначе пары были бы видны заранее."""
+
+    left = serializers.SerializerMethodField()
+    right = serializers.SerializerMethodField()
+
+    def get_left(self, pairs):
+        cards = [
+            MatchingCard(p.id, p.first_text or None, p.first_image)
+            for p in pairs
+        ]
+        return MatchingCardSerializer(cards, many=True).data
+
+    def get_right(self, pairs):
+        cards = [
+            MatchingCard(p.id, p.second_text or None, p.second_image)
+            for p in pairs
+        ]
+        random.shuffle(cards)
+        return MatchingCardSerializer(cards, many=True).data
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Пример запроса (matching)',
+            value={
+                'started_at': '2026-09-07T14:30:00Z',
+                'finished_at': '2026-09-07T14:30:30Z',
+                'duration_seconds': 30,
+                'pairs': [
+                    {'first_id': 1, 'second_id': 1},
+                    {'first_id': 2, 'second_id': 2},
+                ],
+            },
+        ),
+    ],
+)
+class MatchingCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа matching."""
+
+    pairs = serializers.ListField(
+        child=serializers.DictField(child=serializers.IntegerField()),
+        allow_empty=False,
+        help_text=(
+            'Список пар вида {"first_id": <id>, "second_id": <id>} — '
+            'id карточек из левого и правого списков (answers_info).'
+        ),
+    )
+
+    def validate_pairs(self, value):
+        for pair in value:
+            if set(pair.keys()) != {'first_id', 'second_id'}:
+                raise serializers.ValidationError(
+                    'Каждая пара должна содержать поля first_id и second_id.'
+                )
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        allowed_ids = {a.id for a in exercise.matchinganswers.all()}
+        for pair in attrs['pairs']:
+            if (
+                pair['first_id'] not in allowed_ids
+                or pair['second_id'] not in allowed_ids
+            ):
+                raise serializers.ValidationError(
+                    {'pairs': 'Элемент пары не принадлежит данному заданию.'}
+                )
+        return attrs
+
+
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Результат прохождения',
+            value={'score': 0.67, 'success': False},
+        ),
+    ],
+)
+class ResultExerciseSerializer(serializers.Serializer):
+    """Результат проверки ответа пользователя."""
+
+    score = serializers.FloatField(
+        required=True,
+        help_text='Оценка за упражнение (0.0–1.0)',
+    )
+    success = serializers.BooleanField(
+        required=True,
+        help_text='Признак успешного прохождения',
+    )
+
+
+class InputCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа input."""
+
+    answers = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, trim_whitespace=False),
+        allow_empty=False,
+        help_text=(
+            'Ответ(ы) пользователя. Формат зависит от check_method эталона.'
+        ),
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        answer = exercise.inputanswers.first() if exercise else None
+        if answer is None:
+            raise serializers.ValidationError(
+                {'detail': 'Для задания не настроен эталонный ответ.'}
+            )
+
+        method = answer.check_method
+        if (
+            method
+            in (
+                InputAnswer.CheckMethod.SINGLE_ANSWER,
+                InputAnswer.CheckMethod.FREE_ANSWER,
+            )
+            and len(attrs['answers']) != 1
+        ):
+            raise serializers.ValidationError(
+                {'answers': 'Для этого задания нужен ровно один ответ.'}
+            )
+        return attrs
 
 
 class ExerciseShortSerializer(serializers.ModelSerializer):
@@ -202,10 +374,47 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
         )
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Детальное задание с ответами',
+            value={
+                'id': 42,
+                'title': 'Запоминание слов',
+                'description': (
+                    'Запомните список слов, затем выберите те, что были в '
+                    'списке'
+                ),
+                'type': 'choice',
+                'difficulty': 'easy',
+                'question': 'Какие из этих слов были в исходном списке?',
+                'image': None,
+                'audio': None,
+                'is_active': True,
+                'created_at': '2026-09-07T14:15:30Z',
+                'answers_info': [
+                    {'id': 101, 'text': 'Яблоко', 'image': None},
+                    {'id': 102, 'text': 'Зонт', 'image': None},
+                    {'id': 103, 'text': 'Ключ', 'image': None},
+                    {'id': 104, 'text': 'Молоток', 'image': None},
+                ],
+            },
+        ),
+    ],
+)
 class ExerciseFullSerializer(ExerciseShortSerializer):
     """Сериализатор полного представления объектов класса Exercise."""
 
-    answers_info = serializers.SerializerMethodField(read_only=True)
+    answers_info = serializers.SerializerMethodField(
+        read_only=True,
+        help_text=(
+            'Для choice/ordering/grouping/drawing — список вариантов '
+            'ответа. Для matching — {"left": [...], "right": [...]}, '
+            'каждая карточка: {"id", "text", "image"} (карточки '
+            'раздельно, правая колонка перемешана). Для input — всегда '
+            'пустой список (эталон скрыт).'
+        ),
+    )
 
     ANSWER_SERIALIZERS: dict[
         str,
@@ -231,11 +440,12 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         if obj.type == ExerciseType.ORDERING and not self.context.get(
             'show_correct', False
         ):
-            shuffle(answers)
+            random.shuffle(answers)
 
+        many = obj.type != ExerciseType.MATCHING
         return serializer_class(
             answers,
-            many=True,
+            many=many,
             context=self.context,
         ).data
 
@@ -255,6 +465,24 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         )
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Элемент истории',
+            value={
+                'id': 1,
+                'exercise_title': 'Запоминание слов',
+                'exercise_type': 'choice',
+                'difficulty': 'easy',
+                'score': 1.0,
+                'success': True,
+                'started_at': '2026-09-07T14:30:00Z',
+                'finished_at': '2026-09-07T14:32:15Z',
+                'duration_seconds': 135,
+            },
+        ),
+    ],
+)
 class HistoryListSerializer(serializers.ModelSerializer):
     """Список краткой истории прохождения упражнений."""
 
@@ -290,6 +518,31 @@ class UserAttemptSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Детальная история с попыткой',
+            value={
+                'id': 1,
+                'exercise_title': 'Запоминание слов',
+                'exercise_type': 'choice',
+                'difficulty': 'easy',
+                'started_at': '2026-09-07T14:30:00Z',
+                'finished_at': '2026-09-07T14:32:15Z',
+                'duration_seconds': 135,
+                'score': 1.0,
+                'success': True,
+                'attempt': {
+                    'id': 1,
+                    'answer_data': {
+                        'answers_ids': [101, 103],
+                        'note': 'Содержимое зависит от типа задания',
+                    },
+                },
+            },
+        ),
+    ],
+)
 class HistoryDetailSerializer(serializers.ModelSerializer):
     """Детальный просмотр прохождения упражнения (с ответами)."""
 
@@ -318,23 +571,49 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-VERIFY_PURPOSES = (
-    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
-    (EmailCode.Purpose.LOGIN, 'Вход'),
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Запрос кода',
+            value={'email': 'user@example.com'},
+        ),
+    ],
 )
-
-
 class LoginCodeRequestSerializer(serializers.Serializer):
     """Запрос кода для входа (регистрация и сброс — эндпоинты djoser)."""
 
-    email = serializers.EmailField(max_length=EMAIL_LENGTH)
+    email = serializers.EmailField(
+        max_length=EMAIL_LENGTH,
+        help_text='Email для отправки кода подтверждения',
+    )
 
 
+@extend_schema_serializer(
+    examples=[
+        OpenApiExample(
+            'Подтверждение входа',
+            value={
+                'email': 'user@example.com',
+                'code': '123456',
+                'purpose': 'login',
+            },
+        ),
+    ],
+)
 class CodeVerifySerializer(serializers.Serializer):
     """Подтверждение кода (регистрация / вход) — возвращает JWT."""
 
-    email = serializers.EmailField(max_length=EMAIL_LENGTH)
-    code = serializers.CharField(
-        max_length=CODE_LENGTH, min_length=1, trim_whitespace=True
+    email = serializers.EmailField(
+        max_length=EMAIL_LENGTH,
+        help_text='Email пользователя',
     )
-    purpose = serializers.ChoiceField(choices=VERIFY_PURPOSES)
+    code = serializers.CharField(
+        max_length=CODE_LENGTH,
+        min_length=1,
+        trim_whitespace=True,
+        help_text='Код подтверждения из письма',
+    )
+    purpose = serializers.ChoiceField(
+        choices=VERIFY_PURPOSES,
+        help_text="Цель: 'registration' — регистрация, 'login' — вход",
+    )

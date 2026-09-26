@@ -23,4 +23,12 @@ EXERCISE_REGISTRY: dict[str, ExerciseConfig] = {
         service=services.OrderingExerciseService(),
         write_serializer=serializers.OrderingCheckSerializer,
     ),
+    ExerciseType.INPUT: ExerciseConfig(
+        service=services.InputExerciseService(),
+        write_serializer=serializers.InputCheckSerializer,
+    ),
+    ExerciseType.MATCHING: ExerciseConfig(
+        service=services.MatchingExerciseService(),
+        write_serializer=serializers.MatchingCheckSerializer,
+    ),
 }

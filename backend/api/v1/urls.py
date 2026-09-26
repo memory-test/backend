@@ -24,10 +24,8 @@ urlpatterns = [
         HistoryDetailView.as_view(),
         name='history-detail',
     ),
-    # djoser: регистрация, активация, сброс/смена пароля, профиль, JWT
     path('auth/', include('djoser.urls')),
     path('auth/', include('djoser.urls.jwt')),
-    # свой флоу одноразовых кодов: вход по коду
     path('auth/code/request/', LoginCodeRequestView.as_view()),
     path('auth/verify/', CodeVerifyView.as_view()),
 ]

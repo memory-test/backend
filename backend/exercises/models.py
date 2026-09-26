@@ -37,27 +37,63 @@ class Exercise(models.Model):
     """Модель заданий."""
 
     title = models.CharField(
-        'Название', max_length=EXERCISE_TITLE_LENGTH, unique=True
+        'Название',
+        max_length=EXERCISE_TITLE_LENGTH,
+        unique=True,
+        help_text=(
+            'Название упражнения, отображаемое в списке и карточке задания.'
+        ),
     )
     description = models.TextField(
-        'Описание', max_length=EXERCISE_DESCRIPTION_LENGTH
+        'Описание',
+        max_length=EXERCISE_DESCRIPTION_LENGTH,
+        help_text='Краткое описание задания для пользователя (цели, формат).',
     )
     type = models.CharField(
         'Тип задания',
         choices=ExerciseType.choices,
         max_length=ExerciseType.get_max_length(),
+        help_text=(
+            'Тип упражнения: choice, input, ordering, grouping, matching, '
+            'drawing, offline.'
+        ),
     )
     difficulty = models.CharField(
         'Уровень сложности',
         max_length=Difficulty.get_max_length(),
         choices=Difficulty.choices,
         default=Difficulty.EASY,
+        help_text=(
+            'Сложность задания: easy, medium, hard (влияет на '
+            'начисление баллов).'
+        ),
     )
-    question = models.TextField('Текст вопроса', max_length=QUESTION_LIMIT)
-    image = models.ImageField('Изображение вопроса', blank=True)
-    audio = models.FileField('Аудио-вопрос', blank=True)
-    is_active = models.BooleanField('Доступно к решению')
-    created_at = models.DateTimeField('Дата создания', auto_now_add=True)
+    question = models.TextField(
+        'Текст вопроса',
+        max_length=QUESTION_LIMIT,
+        help_text=(
+            'Основной текст вопроса/задания, который видит пользователь.'
+        ),
+    )
+    image = models.ImageField(
+        'Изображение вопроса',
+        blank=True,
+        help_text='Изображение к вопросу.',
+    )
+    audio = models.FileField(
+        'Аудио-вопрос',
+        blank=True,
+        help_text='Аудиофайл к заданию (например, для аудирования).',
+    )
+    is_active = models.BooleanField(
+        'Доступно к решению',
+        help_text='Флаг доступности упражнения для прохождения.',
+    )
+    created_at = models.DateTimeField(
+        'Дата создания',
+        auto_now_add=True,
+        help_text='Дата и время создания упражнения (автоматически).',
+    )
 
     ANSWER_RELATIONS = {
         value: f'{value}answers' for value, _ in ExerciseType.choices
@@ -69,12 +105,9 @@ class Exercise(models.Model):
             return True
         if not self.pk:
             return False
-
         relation_name = self.ANSWER_RELATIONS.get(self.type)
         if relation_name is None:
             return False
-        if self.type == 'input':
-            return hasattr(self, relation_name)
         return getattr(self, relation_name).exists()
 
     def clean(self):
@@ -120,8 +153,17 @@ class Answer(models.Model):
 class AnswerTextImageFields(Answer):
     """Абстрактная модель ответов с полями "текст" и "изображение"."""
 
-    text = models.TextField('Текст', max_length=ANSWER_LIMIT, blank=True)
-    image = models.ImageField('Изображение', blank=True)
+    text = models.TextField(
+        'Текст',
+        max_length=ANSWER_LIMIT,
+        blank=True,
+        help_text='Текстовое содержание ответа.',
+    )
+    image = models.ImageField(
+        'Изображение',
+        blank=True,
+        help_text='Изображение ответа.',
+    )
 
     class Meta(Answer.Meta):
         abstract = True
@@ -137,68 +179,121 @@ class AnswerTextImageFields(Answer):
         ]
 
 
-# Модели ответов необходимо именовать в соответсвии с их типом по схеме:
-# class TypeAnswer(Answer)
-
-
 class InputAnswer(Answer):
-    """Ответы с ручным вводом."""
+    """Эталонные ответы для заданий типа input."""
 
-    exercise = models.OneToOneField(
-        Exercise,
-        models.CASCADE,
-        verbose_name='Задание',
-        related_name='inputanswers',
+    class CheckMethod(models.TextChoices):
+        SINGLE_ANSWER = 'single_answer', 'Один ответ'
+        LIST_ANSWER = 'list_answer', 'Список ответов'
+        FREE_ANSWER = 'free_answer', 'Свободная форма (пока не реализовано)'
+
+    check_method = models.CharField(
+        'Способ проверки',
+        max_length=max(len(el) for el, _ in CheckMethod.choices),
+        choices=CheckMethod.choices,
+        default=CheckMethod.SINGLE_ANSWER,
     )
-    expected_text = models.TextField(
-        'Ожидаемый текст ответа', max_length=ANSWER_LIMIT
+    expected_text = models.CharField(
+        'Эталонный ответ', max_length=ANSWER_LIMIT
     )
+
+    def __str__(self):
+        return f'Задание №{self.exercise_id}: «{self.expected_text}»'
 
 
 class ChoiceAnswer(AnswerTextImageFields):
     """Ответы с выбором варианта(ов)."""
 
-    is_correct = models.BooleanField('Верный')
+    is_correct = models.BooleanField(
+        'Верный',
+        help_text=(
+            'Признак правильности варианта (используется при проверке и '
+            'показе эталона).'
+        ),
+    )
 
     class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'is_correct',
         ]
 
+    def __str__(self):
+        status = 'верный' if self.is_correct else 'неверный'
+        return f'Задание №{self.exercise_id}: «{self.text}» ({status})'
+
 
 class OrderingAnswer(AnswerTextImageFields):
     """Ответы для заданий с распределением элементов."""
 
-    position = models.SmallIntegerField('Порядок')
+    position = models.SmallIntegerField(
+        'Порядок',
+        help_text=(
+            'Ожидаемый порядковый номер элемента в правильной '
+            'последовательности.'
+        ),
+    )
 
     class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'position',
         ]
 
+    def __str__(self):
+        return (
+            f'Задание №{self.exercise_id}: «{self.text}» '
+            f'(позиция {self.position})'
+        )
+
 
 class GroupingAnswer(AnswerTextImageFields):
     """Ответы для заданий на группировку."""
 
-    group = models.CharField('Группа', max_length=ANSWERS_GROUP_LIMIT)
+    group = models.CharField(
+        'Группа',
+        max_length=ANSWERS_GROUP_LIMIT,
+        help_text=(
+            'Имя группы/категории, к которой относится элемент '
+            "(например, 'фрукты')."
+        ),
+    )
 
     class Meta(AnswerTextImageFields.Meta):
         ordering = [
             'group',
         ]
 
+    def __str__(self):
+        return (
+            f'Задание №{self.exercise_id}: «{self.text}» '
+            f'(группа «{self.group}»)'
+        )
+
 
 class MatchingAnswer(Answer):
     """Ответы для заданий на сопоставление."""
 
     first_text = models.TextField(
-        'Первый текст пары', max_length=ANSWER_LIMIT, blank=True
+        'Первый текст пары',
+        max_length=ANSWER_LIMIT,
+        blank=True,
+        help_text='Текст первого элемента пары для сопоставления.',
     )
-    first_image = models.ImageField('Первое изображение пары', blank=True)
+    first_image = models.ImageField(
+        'Первое изображение пары',
+        blank=True,
+        help_text='Изображение первого элемента пары.',
+    )
     second_text = models.TextField(
-        'Второй текст пары', max_length=ANSWER_LIMIT, blank=True
+        'Второй текст пары',
+        max_length=ANSWER_LIMIT,
+        blank=True,
+        help_text='Текст второго элемента пары для сопоставления.',
     )
-    second_image = models.ImageField('Второе изображение пары', blank=True)
+    second_image = models.ImageField(
+        'Второе изображение пары',
+        blank=True,
+        help_text='Изображение второго элемента пары.',
+    )
 
     class Meta(Answer.Meta):
         constraints = [
@@ -215,23 +310,40 @@ class MatchingAnswer(Answer):
             )
         ]
 
+    def __str__(self):
+        first = self.first_text or 'изображение'
+        second = self.second_text or 'изображение'
+        return f'Задание №{self.exercise_id}: «{first}» — «{second}»'
+
 
 class DrawingAnswer(AnswerTextImageFields):
     """Ответы для графических заданий."""
 
-    completion_only = models.BooleanField('Только фиксация выполнения')
+    completion_only = models.BooleanField(
+        'Только фиксация выполнения',
+        help_text=(
+            'Если True, достаточно просто зафиксировать факт выполнения.'
+        ),
+    )
     trajectory = models.JSONField(
         'Траектория (координаты)',
         blank=True,
         null=True,
+        help_text='Координаты траектории рисунка пользователя.',
     )
     tolerance = models.SmallIntegerField(
         'Допустимое отклонение',
         blank=True,
         null=True,
+        help_text='Допустимое отклонение от эталонной траектории.',
     )
     additional_image = models.ImageField(
-        'Дополнительное изображение', blank=True
+        'Дополнительное изображение',
+        blank=True,
+        help_text=(
+            'Эталонное или вспомогательное изображение для проверки '
+            'графического ответа.'
+        ),
     )
 
     class Meta(AnswerTextImageFields.Meta):
@@ -249,3 +361,7 @@ class DrawingAnswer(AnswerTextImageFields):
                 violation_error_message='Необходимо заполнить поля ответа.',
             ),
         )
+
+    def __str__(self):
+        mode = 'только фиксация' if self.completion_only else 'по траектории'
+        return f'Задание №{self.exercise_id}: графический ответ ({mode})'

@@ -24,14 +24,12 @@ AUTH_USER_MODEL = 'users.User'
 
 
 INSTALLED_APPS = [
-    # Django
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    # Сторонние
     'rest_framework',
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist',
@@ -39,7 +37,6 @@ INSTALLED_APPS = [
     'djoser',
     'drf_spectacular',
     'corsheaders',
-    # Локальные приложения
     'authentication.apps.AuthenticationConfig',
     'users.apps.UsersConfig',
     'exercises.apps.ExercisesConfig',
@@ -172,9 +169,6 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
 
-# djoser: регистрация/профиль/сброс пароля/JWT из коробки.
-# Активация и сброс переопределены под 6-значные коды —
-# см. authentication/djoser.py (код-движок authentication/services.py)
 DJOSER = {
     'LOGIN_FIELD': 'email',
     'SEND_ACTIVATION_EMAIL': True,
@@ -194,8 +188,6 @@ DJOSER = {
     },
 }
 
-# Email: по умолчанию коды пишутся в консоль (локальная разработка),
-# в проде бэкенд задаётся через окружение
 EMAIL_BACKEND = os.getenv(
     'EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend'
 )
@@ -221,28 +213,22 @@ LOGGING = {
         },
     },
     'handlers': {
-        # Always active — writes to stdout, which is what `docker logs` reads
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'console',
             'level': 'DEBUG',
         },
     },
-    # Catch-all for project apps and third-party libraries. Without it their
-    # records reach a handler-less root logger and are dropped silently.
     'root': {
         'handlers': ['console'],
         'level': DEBUG,
     },
     'loggers': {
-        # Django internals — pinned to INFO so LOG_LEVEL=DEBUG does not flood
-        # the console with autoreload and template chatter
         'django': {
             'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },
-        # SQL queries — INFO to avoid flooding, switch to DEBUG when needed
         'django.db.backends': {
             'handlers': ['console'],
             'level': 'INFO',

@@ -5,13 +5,22 @@ TAG_MAP = {
     'progress': 'Прогресс',
 }
 
+
 def add_tags_by_path(result, generator, request, public):
     prefix = '/api/v1/'
     for path, methods in result['paths'].items():
         if path.startswith(prefix):
-            segments = path[len(prefix):].split('/')
+            segments = path[len(prefix) :].split('/')
             first = segments[0]
-            key = 'profile' if (first == 'auth' and len(segments) > 1 and segments[1] == 'users') else first
+            key = (
+                'profile'
+                if (
+                    first == 'auth'
+                    and len(segments) > 1
+                    and segments[1] == 'users'
+                )
+                else first
+            )
         else:
             key = 'other'
 

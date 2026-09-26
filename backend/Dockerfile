@@ -5,7 +5,6 @@ WORKDIR /app
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 ENV UV_PYTHON_DOWNLOADS=0
-# Keep the venv outside /app so a dev bind mount over /app can't shadow it
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv
 
 COPY pyproject.toml uv.lock ./
