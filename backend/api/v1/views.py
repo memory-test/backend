@@ -91,7 +91,10 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
     def pass_exercise(self, request, pk=None):
         config = self._get_config(pk)
         exercise = config.service.get_exercise(pk)
-        serializer = config.write_serializer(data=request.data)
+        serializer = config.write_serializer(
+            data=request.data,
+            context={'exercise': exercise},
+        )
         serializer.is_valid(raise_exception=True)
         clean_data = serializer.validated_data
         task_result = config.service.check_answer(exercise, clean_data)

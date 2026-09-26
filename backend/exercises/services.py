@@ -9,12 +9,13 @@ from exercises.models import Exercise
 @dataclass(frozen=True, slots=True)
 class EvaluationResult:
     """Универсальный дата класс для возврата результатов проверки"""
+
     score: float
     success: bool
 
+
 class AbstractExerciseService(ABC):
     """Интерфейс для работы с заданиями."""
-
 
     @abstractmethod
     def get_exercise(self, exercise_id: int) -> Exercise:
@@ -25,7 +26,9 @@ class AbstractExerciseService(ABC):
         ...
 
     @abstractmethod
-    def check_answer(self, exercise: Exercise, user_answer_data: dict) -> EvaluationResult:
+    def check_answer(
+        self, exercise: Exercise, user_answer_data: dict
+    ) -> EvaluationResult:
         """
         Полная проверка результатов задания.
         Сравнивает ответ пользователя с эталоном из БД.
@@ -33,15 +36,19 @@ class AbstractExerciseService(ABC):
         ...
 
 
-
 class ChooseExerciseService(AbstractExerciseService):
-
     def get_exercise(self, exercise_id: int) -> Exercise:
-        return get_object_or_404(Exercise.objects.prefetch_related('choiceanswers'), id=exercise_id)
+        return get_object_or_404(
+            Exercise.objects.prefetch_related('choiceanswers'), id=exercise_id
+        )
 
-    def check_answer(self, exercise: Exercise, user_answer_data: dict) -> EvaluationResult:
+    def check_answer(
+        self, exercise: Exercise, user_answer_data: dict
+    ) -> EvaluationResult:
         correct_options = [
-            answer.id for answer in exercise.choiceanswers.all() if answer.is_correct
+            answer.id
+            for answer in exercise.choiceanswers.all()
+            if answer.is_correct
         ]
         user_choices: list = user_answer_data.get('answers_ids')
         success = sorted(user_choices) == sorted(correct_options)
@@ -49,3 +56,29 @@ class ChooseExerciseService(AbstractExerciseService):
         #  для этого нужна будет формула.
         score = 100 if success else 0
         return EvaluationResult(success=success, score=score)
+
+
+class OrderingExerciseService(AbstractExerciseService):
+    """Получение и проверка задания на упорядочивание."""
+
+    def get_exercise(self, exercise_id: int) -> Exercise:
+        queryset = Exercise.objects.prefetch_related('orderinganswers')
+        return get_object_or_404(queryset, id=exercise_id)
+
+    def check_answer(
+        self,
+        exercise: Exercise,
+        user_answer_data: dict,
+    ) -> EvaluationResult:
+        correct_order = [
+            answer.id for answer in exercise.orderinganswers.all()
+        ]
+        submitted_order = user_answer_data['answers_ids']
+
+        success = submitted_order == correct_order
+        score = 100 if success else 0
+
+        return EvaluationResult(
+            success=success,
+            score=score,
+        )

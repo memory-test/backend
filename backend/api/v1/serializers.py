@@ -1,3 +1,4 @@
+from random import shuffle
 from typing import Any
 
 from drf_spectacular.types import OpenApiTypes
@@ -106,6 +107,49 @@ class OrderingAnswerSerializer(AnswerBaseSerializer):
 
     class Meta(AnswerBaseSerializer.Meta):
         model = OrderingAnswer
+        fields = AnswerBaseSerializer.Meta.fields + ('id', 'position')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        if not self.context.get('show_correct', False):
+            data.pop('position', None)
+
+        return data
+
+
+class OrderingCheckSerializer(BaseCheckSerializer):
+    answers_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context['exercise']
+
+        submitted_ids = attrs['answers_ids']
+        allowed_ids = {answer.id for answer in exercise.orderinganswers.all()}
+
+        if len(submitted_ids) != len(set(submitted_ids)):
+            raise serializers.ValidationError(
+                {
+                    'answers_ids': (
+                        'Каждый элемент должен встречаться ровно один раз.'
+                    )
+                }
+            )
+
+        if set(submitted_ids) != allowed_ids:
+            raise serializers.ValidationError(
+                {
+                    'answers_ids': (
+                        'Необходимо передать все элементы данного задания.'
+                    )
+                }
+            )
+
+        return attrs
 
 
 class GroupingAnswerSerializer(AnswerBaseSerializer):
@@ -183,6 +227,11 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         if relation_name is None:
             return []
         answers = getattr(obj, relation_name).all()
+
+        if obj.type == ExerciseType.ORDERING and not self.context.get(
+            'show_correct', False
+        ):
+            shuffle(answers)
 
         return serializer_class(
             answers,

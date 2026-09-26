@@ -19,4 +19,8 @@ EXERCISE_REGISTRY: dict[str, ExerciseConfig] = {
         service=services.ChooseExerciseService(),
         write_serializer=serializers.ChoiceCheckSerializer,
     ),
+    ExerciseType.ORDERING: ExerciseConfig(
+        service=services.OrderingExerciseService(),
+        write_serializer=serializers.OrderingCheckSerializer,
+    ),
 }
