@@ -16,7 +16,6 @@ from exercises.models import (
     DrawingAnswer,
     Exercise,
     ExerciseType,
-    GroupingAnswer,
     InputAnswer,
     OrderingAnswer,
 )
@@ -75,12 +74,43 @@ class OrderingAnswerSerializer(AnswerBaseSerializer):
         fields = AnswerBaseSerializer.Meta.fields + ('id', 'position')
 
 
-class GroupingAnswerSerializer(AnswerBaseSerializer):
-    """Сериализатор ответов на группировку."""
+@dataclass
+class GroupingItem:
+    """Один элемент для группировки, без указания правильной группы."""
 
-    class Meta(AnswerBaseSerializer.Meta):
-        model = GroupingAnswer
-        fields = AnswerBaseSerializer.Meta.fields + ('id', 'group')
+    id: int
+    text: str | None
+    image: object
+
+
+class GroupingItemSerializer(serializers.Serializer):
+    """Один элемент для группировки: id, текст и/или картинка."""
+
+    id = serializers.IntegerField()
+    text = serializers.CharField(allow_null=True)
+    image = serializers.SerializerMethodField()
+
+    @extend_schema_field(OpenApiTypes.STR)
+    def get_image(self, obj: GroupingItem):
+        return obj.image.url if obj.image else None
+
+
+class GroupingAnswerSerializer(serializers.Serializer):
+    """Элементы для группировки (без правильной группы) и список
+    доступных категорий."""
+
+    items = serializers.SerializerMethodField()
+    groups = serializers.SerializerMethodField()
+
+    def get_items(self, answers):
+        cards = [
+            GroupingItem(el.id, el.text or None, el.image) for el in answers
+        ]
+        random.shuffle(cards)
+        return GroupingItemSerializer(cards, many=True).data
+
+    def get_groups(self, answers):
+        return sorted({el.group for el in answers})
 
 
 class DrawingAnswerSerializer(AnswerBaseSerializer):
@@ -167,7 +197,7 @@ class MatchingCard:
 
     id: int
     text: str | None
-    image: object  # ImageFieldFile или None
+    image: object
 
 
 class MatchingCardSerializer(serializers.Serializer):
@@ -191,15 +221,15 @@ class MatchingAnswerSerializer(serializers.Serializer):
 
     def get_left(self, pairs):
         cards = [
-            MatchingCard(p.id, p.first_text or None, p.first_image)
-            for p in pairs
+            MatchingCard(el.id, el.first_text or None, el.first_image)
+            for el in pairs
         ]
         return MatchingCardSerializer(cards, many=True).data
 
     def get_right(self, pairs):
         cards = [
-            MatchingCard(p.id, p.second_text or None, p.second_image)
-            for p in pairs
+            MatchingCard(el.id, el.second_text or None, el.second_image)
+            for el in pairs
         ]
         random.shuffle(cards)
         return MatchingCardSerializer(cards, many=True).data
@@ -244,7 +274,7 @@ class MatchingCheckSerializer(BaseCheckSerializer):
     def validate(self, attrs):
         attrs = super().validate(attrs)
         exercise = self.context.get('exercise')
-        allowed_ids = {a.id for a in exercise.matchinganswers.all()}
+        allowed_ids = {el.id for el in exercise.matchinganswers.all()}
         for pair in attrs['pairs']:
             if (
                 pair['first_id'] not in allowed_ids
@@ -252,6 +282,39 @@ class MatchingCheckSerializer(BaseCheckSerializer):
             ):
                 raise serializers.ValidationError(
                     {'pairs': 'Элемент пары не принадлежит данному заданию.'}
+                )
+        return attrs
+
+
+class GroupingCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа grouping."""
+
+    assignments = serializers.ListField(
+        child=serializers.DictField(),
+        allow_empty=False,
+        help_text=(
+            'Список назначений вида {"item_id": <id>, "group": "<имя '
+            'категории>"} — id элемента из answers_info.items и одно '
+            'из значений answers_info.groups.'
+        ),
+    )
+
+    def validate_assignments(self, value):
+        for item in value:
+            if set(item.keys()) != {'item_id', 'group'}:
+                raise serializers.ValidationError(
+                    'Каждое назначение должно содержать поля item_id и group.'
+                )
+        return value
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context.get('exercise')
+        allowed_ids = {el.id for el in exercise.groupinganswers.all()}
+        for assignment in attrs['assignments']:
+            if assignment['item_id'] not in allowed_ids:
+                raise serializers.ValidationError(
+                    {'assignments': 'Элемент не принадлежит данному заданию.'}
                 )
         return attrs
 
@@ -365,10 +428,11 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
     answers_info = serializers.SerializerMethodField(
         read_only=True,
         help_text=(
-            'Для choice/ordering/grouping/drawing — список вариантов '
-            'ответа. Для matching — {"left": [...], "right": [...]}, '
-            'каждая карточка: {"id", "text", "image"} (карточки '
-            'раздельно, правая колонка перемешана). Для input — всегда '
+            'Для choice/ordering/drawing — список вариантов ответа. '
+            'Для grouping — {"items": [...], "groups": [...]}, каждый '
+            'элемент {"id", "text", "image"} (группа скрыта). Для '
+            'matching — {"left": [...], "right": [...]}, каждая '
+            'карточка {"id", "text", "image"}. Для input — всегда '
             'пустой список (эталон скрыт).'
         ),
     )
@@ -389,7 +453,7 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         relation_name = obj.ANSWER_RELATIONS.get(obj.type)
         answers = getattr(obj, relation_name).all()
 
-        many = obj.type != ExerciseType.MATCHING
+        many = obj.type not in (ExerciseType.MATCHING, ExerciseType.GROUPING)
         return serializer_class(
             answers,
             many=many,

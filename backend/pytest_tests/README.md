@@ -26,7 +26,8 @@ pytest_tests/
     │   ├── test_single_answer.py    # check_method=single_answer
     │   ├── test_list_answer.py      # check_method=list_answer
     │   └── test_free_answer.py      # check_method=free_answer
-    └── test_matching.py         # сопоставление пар (matching)
+    ├── test_matching.py         # сопоставление пар (matching)
+    └── test_grouping.py         # распределение элементов по категориям (grouping)
 ```
 
 ## Где искать фикстуры
@@ -51,6 +52,8 @@ pytest_tests/
 - `proverb_exercise` — готовое задание `input` (`free_answer`) с
   эталоном-рубрикой.
 - `two_pairs_exercise` — готовое задание `matching` с двумя парами.
+- `fruits_vegetables_exercise` — готовое задание `grouping` с четырьмя
+  элементами и двумя категориями (Фрукты/Овощи).
 
 **`pytest_tests/auth/conftest.py`**
 - `api_client` — неавторизованный `APIClient`.
@@ -92,11 +95,6 @@ uv run pytest -k free_answer           # по подстроке в имени �
   один-два негативных случая (неверный ответ, чужой id, невалидный
   формат). Не нужно покрывать то, что и так гарантирует DRF
   (`allow_empty=False` и подобное) — это не логика проекта.
-- Новый тип задания получает отдельный файл `test_<тип>.py` (или
-  подпапку, если у типа несколько разных сценариев проверки, как у
-  `choice` и `input`), с фикстурой готового задания в
-  `exercises/conftest.py`, если она пригодится больше чем одному
-  тесту.
-- Не создавайте `pytest_tests/base.py` и не наследуйтесь от
-  самодельных базовых классов — весь проект на pytest-фикстурах, без
-  классов `TestCase`.
+- Новый тип задания получает отдельный файл `test_<тип>.py`, с фикстурой 
+  готового задания в `exercises/conftest.py`, если она пригодится больше чем 
+  одному тесту.

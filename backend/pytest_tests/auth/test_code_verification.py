@@ -6,8 +6,9 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from .conftest import CODE_REQUEST, VERIFY
 from authentication.models import EmailCode
+
+from .conftest import CODE_REQUEST, VERIFY
 
 User = get_user_model()
 
@@ -22,7 +23,11 @@ def test_verify_registration_activates_and_returns_jwt(
 
     resp = post(
         VERIFY,
-        {'email': 'alice@example.com', 'code': code, 'purpose': 'registration'},
+        {
+            'email': 'alice@example.com',
+            'code': code,
+            'purpose': 'registration',
+        },
     )
 
     assert resp.status_code == 200
@@ -74,7 +79,11 @@ def test_verify_expired_code_rejected(register_and_code, post):
 
     resp = post(
         VERIFY,
-        {'email': 'alice@example.com', 'code': code, 'purpose': 'registration'},
+        {
+            'email': 'alice@example.com',
+            'code': code,
+            'purpose': 'registration',
+        },
     )
 
     assert resp.status_code == 400
