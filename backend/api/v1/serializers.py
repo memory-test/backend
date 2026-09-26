@@ -23,6 +23,11 @@ from exercises.models import (
 from progress.models import ExerciseSession, UserAttempt
 from users.constants import EMAIL_LENGTH
 
+VERIFY_PURPOSES = (
+    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
+    (EmailCode.Purpose.LOGIN, 'Вход'),
+)
+
 
 class AnswerBaseSerializer(serializers.ModelSerializer):
     """Базовый сериализатор ответов с полями «текст» и «изображение».
@@ -136,20 +141,21 @@ class ChoiceCheckSerializer(BaseCheckSerializer):
     )
 
     def validate(self, attrs):
+        """Проверяет, что все выбранные id принадлежат этому заданию."""
         exercise = self.context.get('exercise')
-        user_answers_ids = list(set(attrs.get('answers_ids')))
-        allowed_ids = [answer.id for answer in exercise.choiceanswers.all()]
-        for answer_id in user_answers_ids:
-            if answer_id not in allowed_ids:
-                raise serializers.ValidationError(
-                    {
-                        'answers_ids': (
-                            f'Вариант ответа с ID {answer_id} '
-                            'не принадлежит данному заданию.'
-                        )
-                    }
-                )
-        attrs['answers_ids'] = user_answers_ids
+        user_answers_ids = set(attrs.get('answers_ids'))
+        allowed_ids = {answer.id for answer in exercise.choiceanswers.all()}
+        invalid_ids = user_answers_ids - allowed_ids
+        if invalid_ids:
+            raise serializers.ValidationError(
+                {
+                    'answers_ids': (
+                        f'Варианты ответа с ID {sorted(invalid_ids)} '
+                        'не принадлежат данному заданию.'
+                    )
+                }
+            )
+        attrs['answers_ids'] = list(user_answers_ids)
         return attrs
 
 
@@ -510,12 +516,6 @@ class HistoryDetailSerializer(serializers.ModelSerializer):
             'attempt',
         ]
         read_only_fields = fields
-
-
-VERIFY_PURPOSES = (
-    (EmailCode.Purpose.REGISTRATION, 'Регистрация'),
-    (EmailCode.Purpose.LOGIN, 'Вход'),
-)
 
 
 @extend_schema_serializer(

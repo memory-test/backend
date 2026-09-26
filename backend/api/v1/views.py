@@ -43,6 +43,14 @@ from progress.models import ExerciseSession, UserAttempt
 
 from .registry import EXERCISE_REGISTRY, ExerciseConfig
 
+_VERIFY_CODE_HANDLERS = {
+    EmailCode.Purpose.REGISTRATION: services.confirm_registration,
+    EmailCode.Purpose.LOGIN: services.login_with_code,
+}
+
+
+ENUMERATION_MESSAGE = 'Если аккаунт существует, код отправлен на email.'
+
 
 @extend_schema_view(
     list=extend_schema(
@@ -293,14 +301,6 @@ class HistoryDetailView(generics.RetrieveAPIView):
         ).select_related('exercise', 'attempt')
 
 
-ENUMERATION_MSG = 'Если аккаунт существует, код отправлен на email.'
-
-_VERIFY_CODE_HANDLERS = {
-    EmailCode.Purpose.REGISTRATION: services.confirm_registration,
-    EmailCode.Purpose.LOGIN: services.login_with_code,
-}
-
-
 @extend_schema(
     summary='Запрос кода для входа',
     description=(
@@ -334,7 +334,7 @@ class LoginCodeRequestView(APIView):
                 {'detail': str(exc)},
                 status=status.HTTP_429_TOO_MANY_REQUESTS,
             )
-        return Response({'detail': ENUMERATION_MSG})
+        return Response({'detail': ENUMERATION_MESSAGE})
 
 
 @extend_schema(

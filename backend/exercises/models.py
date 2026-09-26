@@ -179,10 +179,6 @@ class AnswerTextImageFields(Answer):
         ]
 
 
-# Модели ответов необходимо именовать в соответсвии с их типом по схеме:
-# class TypeAnswer(Answer)
-
-
 class InputAnswer(Answer):
     """Эталонные ответы для заданий типа input."""
 
@@ -201,6 +197,9 @@ class InputAnswer(Answer):
         'Эталонный ответ', max_length=ANSWER_LIMIT
     )
 
+    def __str__(self):
+        return f'Задание №{self.exercise_id}: «{self.expected_text}»'
+
 
 class ChoiceAnswer(AnswerTextImageFields):
     """Ответы с выбором варианта(ов)."""
@@ -217,6 +216,10 @@ class ChoiceAnswer(AnswerTextImageFields):
         ordering = [
             'is_correct',
         ]
+
+    def __str__(self):
+        status = 'верный' if self.is_correct else 'неверный'
+        return f'Задание №{self.exercise_id}: «{self.text}» ({status})'
 
 
 class OrderingAnswer(AnswerTextImageFields):
@@ -235,6 +238,12 @@ class OrderingAnswer(AnswerTextImageFields):
             'position',
         ]
 
+    def __str__(self):
+        return (
+            f'Задание №{self.exercise_id}: «{self.text}» '
+            f'(позиция {self.position})'
+        )
+
 
 class GroupingAnswer(AnswerTextImageFields):
     """Ответы для заданий на группировку."""
@@ -252,6 +261,12 @@ class GroupingAnswer(AnswerTextImageFields):
         ordering = [
             'group',
         ]
+
+    def __str__(self):
+        return (
+            f'Задание №{self.exercise_id}: «{self.text}» '
+            f'(группа «{self.group}»)'
+        )
 
 
 class MatchingAnswer(Answer):
@@ -294,6 +309,11 @@ class MatchingAnswer(Answer):
                 ),
             )
         ]
+
+    def __str__(self):
+        first = self.first_text or 'изображение'
+        second = self.second_text or 'изображение'
+        return f'Задание №{self.exercise_id}: «{first}» — «{second}»'
 
 
 class DrawingAnswer(AnswerTextImageFields):
@@ -341,3 +361,7 @@ class DrawingAnswer(AnswerTextImageFields):
                 violation_error_message='Необходимо заполнить поля ответа.',
             ),
         )
+
+    def __str__(self):
+        mode = 'только фиксация' if self.completion_only else 'по траектории'
+        return f'Задание №{self.exercise_id}: графический ответ ({mode})'

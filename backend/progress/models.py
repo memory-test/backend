@@ -58,6 +58,11 @@ class ExerciseSession(models.Model):
         verbose_name_plural = 'Сессии упражнений'
         ordering = ['-started_at']
 
+    def __str__(self):
+        return (
+            f'{self.user} — {self.exercise} ({self.started_at:%Y-%m-%d %H:%M})'
+        )
+
 
 class UserAttempt(models.Model):
     session = models.OneToOneField(
@@ -80,3 +85,6 @@ class UserAttempt(models.Model):
         verbose_name = 'Ответ пользователя'
         verbose_name_plural = 'Ответы пользователей'
         ordering = ['id']
+
+    def __str__(self):
+        return f'Попытка №{self.id} к сессии №{self.session_id}'
