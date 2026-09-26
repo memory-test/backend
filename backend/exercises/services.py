@@ -131,7 +131,7 @@ class InputExerciseService(AbstractExerciseService):
         user_words = []
         for item in user_items:
             user_words.extend(self._split_words(item))
-        user_set = {self._normalize(w) for w in user_words}
+        user_set = {self._normalize(word) for word in user_words}
 
         matched = len(expected & user_set)
         score = round(matched / len(expected) * 100, 2)
@@ -164,7 +164,7 @@ class InputExerciseService(AbstractExerciseService):
     def _drop_stop_words(cls, words: list[str]) -> list[str]:
         """Убирает короткие служебные слова, чтобы они не завышали
         схожесть между несвязанными по смыслу ответами."""
-        return [w for w in words if w not in cls._STOP_WORDS]
+        return [word for word in words if word not in cls._STOP_WORDS]
 
     @staticmethod
     def _split_words(raw: str) -> list[str]:
@@ -181,3 +181,29 @@ class InputExerciseService(AbstractExerciseService):
         value = unicodedata.normalize('NFKC', value)
         value = value.strip().lower()
         return re.sub(r'[^\w]', '', value, flags=re.UNICODE)
+
+
+class MatchingExerciseService(AbstractExerciseService):
+    """Тип matching: сопоставление пар (текстовые карточки)."""
+
+    def get_exercise(self, exercise_id: int) -> Exercise:
+        return get_object_or_404(
+            Exercise.objects.prefetch_related('matchinganswers'),
+            id=exercise_id,
+        )
+
+    def check_answer(
+        self, exercise: Exercise, user_answer_data: dict
+    ) -> EvaluationResult:
+        total = exercise.matchinganswers.count()
+        if not total:
+            return EvaluationResult(success=False, score=0)
+
+        submitted_pairs = user_answer_data.get('pairs', [])
+        correct_ids = {
+            el['first_id']
+            for el in submitted_pairs
+            if el['first_id'] == el['second_id']
+        }
+        score = round(len(correct_ids) / total * 100, 2)
+        return EvaluationResult(success=len(correct_ids) == total, score=score)

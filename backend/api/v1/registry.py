@@ -23,4 +23,8 @@ EXERCISE_REGISTRY = {
         service=services.InputExerciseService(),
         write_serializer=serializers.InputCheckSerializer,
     ),
+    ExerciseType.MATCHING: ExerciseConfig(
+        service=services.MatchingExerciseService(),
+        write_serializer=serializers.MatchingCheckSerializer,
+    ),
 }

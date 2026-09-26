@@ -33,6 +33,7 @@ from api.v1.serializers import (
     HistoryListSerializer,
     InputCheckSerializer,
     LoginCodeRequestSerializer,
+    MatchingCheckSerializer,
     ResultExerciseSerializer,
 )
 from authentication import services
@@ -117,7 +118,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         ),
         request=PolymorphicProxySerializer(
             component_name='PassRequest',
-            serializers=[ChoiceCheckSerializer, InputCheckSerializer],
+            serializers=[
+                ChoiceCheckSerializer,
+                InputCheckSerializer,
+                MatchingCheckSerializer,
+            ],
             resource_type_field_name=None,
         ),
         examples=[
@@ -159,6 +164,19 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                     'duration_seconds': 20,
                     'answers': [
                         'Нужно не торопиться, тогда быстрее дойдёшь до цели'
+                    ],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Пример запроса (matching)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:30:30Z',
+                    'duration_seconds': 30,
+                    'pairs': [
+                        {'first_id': 1, 'second_id': 1},
+                        {'first_id': 2, 'second_id': 2},
                     ],
                 },
                 request_only=True,
