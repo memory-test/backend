@@ -1,3 +1,8 @@
+"""Тесты аутентификации: регистрация, коды подтверждения, вход по
+паролю и по коду, сброс пароля, рейт-лимиты и анти-enumeration,
+профиль пользователя (djoser me), смена email.
+"""
+
 from datetime import date, timedelta
 from unittest.mock import patch
 
@@ -35,33 +40,40 @@ def last_code():
 
 @override_settings(EMAIL_BACKEND=LOCMEM)
 class AuthTests(TestCase):
-    """Покрытие флоу авторизации: регистрация, код, вход, сброс пароля."""
+    """Покрытие флоу авторизации: регистрация, код, вход, сброс пароля,
+    рейт-лимиты, профиль и смена email."""
 
     def setUp(self):
+        """Создаёт клиент API и очищает тестовый outbox перед каждым тестом."""
         self.client = APIClient()
         mail.outbox = []
 
-    # --- helpers -------------------------------------------------------
     def _post(self, path, data):
+        """Короткий помощник для POST-запроса к API."""
         return self.client.post(f'{API}{path}', data, format='json')
 
     def _register(self, email='alice@example.com', name='Alice', password=PWD):
+        """Регистрирует пользователя; password=None — упрощённая
+        регистрация без пароля."""
         payload = {'email': email, 'name': name}
         if password is not None:
             payload['password'] = password
         return self._post(REGISTER, payload)
 
     def _register_and_code(self, **kwargs):
+        """Регистрирует пользователя и сразу достаёт код из письма."""
         resp = self._register(**kwargs)
         return resp, last_code()
 
     def _active_user(self, email='carol@example.com', password=PWD):
+        """Создаёт уже активного пользователя, минуя флоу регистрации."""
         user = User(email=email, name=email.split('@')[0], is_active=True)
         user.set_password(password)
         user.save()
         return user
 
     def _auth(self, email, password):
+        """Логинит пользователя и прописывает access-токен в клиент."""
         tok = self._post(TOKEN, {'email': email, 'password': password})
         self.client.credentials(
             HTTP_AUTHORIZATION=f'Bearer {tok.data["access"]}'
@@ -69,6 +81,7 @@ class AuthTests(TestCase):
         return tok
 
     def _exercise(self, title, is_active=True):
+        """Создаёт тестовое задание типа offline."""
         return Exercise.objects.create(
             title=title,
             description='Описание',
@@ -79,6 +92,7 @@ class AuthTests(TestCase):
         )
 
     def _session(self, user, exercise, success=True):
+        """Создаёт завершённую сессию прохождения задания."""
         started_at = timezone.now()
         return ExerciseSession.objects.create(
             user=user,
@@ -91,8 +105,8 @@ class AuthTests(TestCase):
             score=100 if success else 0,
         )
 
-    # --- регистрация (djoser) ------------------------------------------
     def test_register_creates_inactive_user_and_sends_code(self):
+        """Регистрация создаёт неактивного пользователя и отправляет код."""
         resp = self._register()
         self.assertEqual(resp.status_code, 201)
         self.assertFalse(User.objects.get(email='alice@example.com').is_active)
@@ -100,17 +114,21 @@ class AuthTests(TestCase):
         self.assertIn('alice@example.com', mail.outbox[0].to)
 
     def test_register_duplicate_email(self):
+        """Повторная регистрация на тот же email отклоняется."""
         self._register()
         resp = self._register()
         self.assertEqual(resp.status_code, 400)
         self.assertIn('email', resp.data)
 
     def test_register_weak_password(self):
+        """Слабый пароль отклоняется валидацией."""
         resp = self._register(password='123')
         self.assertEqual(resp.status_code, 400)
         self.assertIn('password', resp.data)
 
     def test_register_without_password_is_simplified(self):
+        """Регистрация без пароля создаёт пользователя без пригодного
+        пароля (вход только по коду)."""
         resp = self._register(password=None)
         self.assertEqual(resp.status_code, 201)
         self.assertFalse(
@@ -118,10 +136,9 @@ class AuthTests(TestCase):
         )
 
     def test_resend_activation_sends_new_code(self):
+        """Повторная отправка кода активации работает после кулдауна."""
         self._register()
         mail.outbox = []
-        # имитируем прошедший кулдаун, иначе повторная отправка молча
-        # пропускается
         EmailCode.objects.update(
             created_at=timezone.now() - timedelta(minutes=2)
         )
@@ -130,6 +147,8 @@ class AuthTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
 
     def test_resend_activation_for_unknown_email_is_silent(self):
+        """Повторная отправка на несуществующий email ничего не делает
+        (анти-enumeration), но эндпоинт всё равно отвечает 204."""
         resp = self._post(RESEND_ACTIVATION, {'email': 'noone@example.com'})
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(len(mail.outbox), 0)
@@ -141,8 +160,8 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(len(mail.outbox), 1)
 
-    # --- подтверждение кода -------------------------------------------
     def test_verify_registration_activates_and_returns_jwt(self):
+        """Верный код регистрации активирует пользователя и выдаёт JWT."""
         _, code = self._register_and_code()
         resp = self._post(
             VERIFY,
@@ -158,6 +177,7 @@ class AuthTests(TestCase):
         self.assertTrue(User.objects.get(email='alice@example.com').is_active)
 
     def test_verify_wrong_code(self):
+        """Неверный код отклоняется."""
         self._register()
         resp = self._post(
             VERIFY,
@@ -170,6 +190,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_verify_reuse_code_rejected(self):
+        """Один и тот же код нельзя использовать повторно."""
         _, code = self._register_and_code()
         first = self._post(
             VERIFY,
@@ -191,6 +212,7 @@ class AuthTests(TestCase):
         self.assertEqual(second.status_code, 400)
 
     def test_verify_expired_code_rejected(self):
+        """Просроченный код отклоняется."""
         _, code = self._register_and_code()
         code_obj = EmailCode.objects.filter(
             email='alice@example.com', purpose='registration'
@@ -208,6 +230,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 400)
 
     def test_code_login_returns_jwt(self):
+        """Вход по одноразовому коду выдаёт JWT активному пользователю."""
         self._active_user(email='frank@example.com')
         self._post(CODE_REQUEST, {'email': 'frank@example.com'})
         code = last_code()
@@ -222,8 +245,8 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIn('access', resp.data)
 
-    # --- вход по паролю (djoser jwt) -----------------------------------
     def test_token_login_by_password(self):
+        """Вход по паролю выдаёт JWT."""
         self._active_user()
         resp = self._post(
             TOKEN, {'email': 'carol@example.com', 'password': PWD}
@@ -232,6 +255,7 @@ class AuthTests(TestCase):
         self.assertIn('access', resp.data)
 
     def test_token_login_wrong_password(self):
+        """Неверный пароль отклоняется."""
         self._active_user()
         resp = self._post(
             TOKEN,
@@ -240,14 +264,16 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 401)
 
     def test_token_refresh(self):
+        """Refresh-токен выдаёт новый access-токен."""
         self._active_user(email='gina@example.com')
         tok = self._post(TOKEN, {'email': 'gina@example.com', 'password': PWD})
         resp = self._post(REFRESH, {'refresh': tok.data['refresh']})
         self.assertEqual(resp.status_code, 200)
         self.assertIn('access', resp.data)
 
-    # --- сброс пароля (djoser + код) -----------------------------------
     def test_password_reset_flow(self):
+        """Полный цикл сброса пароля: запрос кода, подтверждение, вход
+        с новым паролем."""
         self._active_user(email='dave@example.com')
         resp = self._post(RESET, {'email': 'dave@example.com'})
         self.assertEqual(resp.status_code, 204)
@@ -269,6 +295,8 @@ class AuthTests(TestCase):
         self.assertIn('access', resp.data)
 
     def test_password_reset_unknown_email_is_generic(self):
+        """Сброс пароля для несуществующего email не выдаёт его
+        отсутствие (анти-enumeration)."""
         resp = self._post(RESET, {'email': 'noone@example.com'})
         self.assertEqual(resp.status_code, 204)
         self.assertEqual(len(mail.outbox), 0)
@@ -299,6 +327,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.status_code, 204)
 
     def test_password_reset_blacklists_old_tokens(self):
+        """Сброс пароля отзывает все ранее выданные токены пользователя."""
         self._active_user(email='dave@example.com')
         tok = self._post(TOKEN, {'email': 'dave@example.com', 'password': PWD})
         self._post(RESET, {'email': 'dave@example.com'})
@@ -315,20 +344,21 @@ class AuthTests(TestCase):
         refreshed = self._post(REFRESH, {'refresh': tok.data['refresh']})
         self.assertEqual(refreshed.status_code, 401)
 
-    # --- рейт-лимиты / анти-enumeration -------------------------------
     def test_code_request_cooldown(self):
+        """Повторный запрос кода до истечения кулдауна отклоняется 429."""
         self._active_user(email='eve@example.com')
         first = self._post(CODE_REQUEST, {'email': 'eve@example.com'})
         self.assertEqual(first.status_code, 200)
         second = self._post(CODE_REQUEST, {'email': 'eve@example.com'})
         self.assertEqual(second.status_code, 429)
 
-    # --- профиль текущего пользователя (djoser me) ---------------------
     def test_me_requires_auth(self):
+        """Профиль недоступен без авторизации."""
         resp = self.client.get(f'{API}{ME}')
         self.assertEqual(resp.status_code, 401)
 
     def test_me_returns_profile(self):
+        """Профиль возвращает данные текущего пользователя."""
         self._active_user()
         self._auth('carol@example.com', PWD)
         resp = self.client.get(f'{API}{ME}')
@@ -337,6 +367,7 @@ class AuthTests(TestCase):
 
     @patch('authentication.djoser.timezone.localdate')
     def test_me_returns_age(self, localdate_mock):
+        """Возраст считается по дате рождения на текущую дату."""
         localdate_mock.return_value = date(2026, 9, 16)
         user = self._active_user()
         user.birth_date = date(1990, 1, 1)
@@ -348,6 +379,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['age'], 36)
 
     def test_me_returns_null_age_without_birth_date(self):
+        """Без даты рождения возраст возвращается как null."""
         self._active_user()
         self._auth('carol@example.com', PWD)
 
@@ -357,6 +389,7 @@ class AuthTests(TestCase):
 
     @patch('authentication.djoser.timezone.localdate')
     def test_me_age_before_and_after_birthday(self, localdate_mock):
+        """Возраст корректно меняется до и после дня рождения."""
         localdate_mock.return_value = date(2026, 9, 16)
         user = self._active_user()
         self._auth('carol@example.com', PWD)
@@ -372,6 +405,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['age'], 26)
 
     def test_me_progress_is_zero_without_active_exercises(self):
+        """Прогресс равен нулю, если нет пройденных активных заданий."""
         self._active_user()
         self._auth('carol@example.com', PWD)
 
@@ -380,6 +414,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['progress_percent'], 0)
 
     def test_me_progress_for_completed_active_exercises(self):
+        """Прогресс — доля пройденных активных заданий от их общего числа."""
         user = self._active_user()
         exercises = [self._exercise(f'Задание {index}') for index in range(4)]
         self._session(user, exercises[0])
@@ -390,6 +425,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['progress_percent'], 25)
 
     def test_me_progress_rounds_to_two_decimal_places(self):
+        """Прогресс округляется до двух знаков после запятой."""
         user = self._active_user()
         exercises = [self._exercise(f'Задание {index}') for index in range(3)]
         self._session(user, exercises[0])
@@ -400,6 +436,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['progress_percent'], 33.33)
 
     def test_me_progress_counts_repeated_exercise_once(self):
+        """Повторное прохождение одного задания засчитывается один раз."""
         user = self._active_user()
         completed_exercise = self._exercise('Пройденное задание')
         self._exercise('Непройденное задание')
@@ -412,6 +449,8 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['progress_percent'], 50)
 
     def test_me_progress_counts_unsuccessful_session(self):
+        """Неуспешная попытка всё равно засчитывается как прохождение
+        для прогресса."""
         user = self._active_user()
         exercise = self._exercise('Неуспешно пройденное задание')
         self._session(user, exercise, success=False)
@@ -422,6 +461,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['progress_percent'], 100)
 
     def test_me_progress_ignores_inactive_exercises(self):
+        """Неактивные задания не учитываются в прогрессе."""
         user = self._active_user()
         self._exercise('Активное задание')
         inactive_exercise = self._exercise(
@@ -435,6 +475,7 @@ class AuthTests(TestCase):
         self.assertEqual(resp.data['progress_percent'], 0)
 
     def test_me_role_is_read_only(self):
+        """Роль нельзя изменить через профиль."""
         self._active_user()
         self._auth('carol@example.com', PWD)
         resp = self.client.patch(
@@ -446,6 +487,8 @@ class AuthTests(TestCase):
         )
 
     def test_me_patch_updates_profile_fields(self):
+        """PATCH обновляет разрешённые поля и возвращает полный профиль,
+        а не только изменённые поля."""
         self._active_user()
         self._auth('carol@example.com', PWD)
         resp = self.client.patch(
@@ -462,11 +505,12 @@ class AuthTests(TestCase):
         self.assertEqual(user.name, 'Carol Updated')
         self.assertEqual(str(user.birth_date), '1995-03-01')
         self.assertEqual(user.current_difficulty, 'hard')
-        # ответ содержит полный профиль, а не только изменённые поля
         self.assertEqual(resp.data['email'], 'carol@example.com')
         self.assertIn('date_joined', resp.data)
 
     def test_me_patch_ignores_read_only_fields(self):
+        """PATCH молча игнорирует попытку изменить read-only поля
+        (email, role, age, progress_percent)."""
         self._active_user()
         self._auth('carol@example.com', PWD)
         resp = self.client.patch(
@@ -486,8 +530,8 @@ class AuthTests(TestCase):
         self.assertIsNone(resp.data['age'])
         self.assertEqual(resp.data['progress_percent'], 0)
 
-    # --- смена email (djoser set_email) --------------------------------
     def test_set_email_changes_login(self):
+        """Смена email меняет и логин для последующего входа."""
         self._active_user()
         self._auth('carol@example.com', PWD)
         resp = self._post(
@@ -509,6 +553,7 @@ class AuthTests(TestCase):
         self.assertIn('access', resp.data)
 
     def test_set_email_wrong_current_password(self):
+        """Смена email требует верный текущий пароль."""
         self._active_user()
         self._auth('carol@example.com', PWD)
         resp = self._post(
