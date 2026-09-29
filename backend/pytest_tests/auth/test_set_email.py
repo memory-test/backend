@@ -1,6 +1,7 @@
 """Тесты смены email (djoser set_email)."""
 
 import pytest
+from django.contrib.auth import get_user_model
 
 from .conftest import SET_EMAIL, TOKEN
 
@@ -9,7 +10,6 @@ pytestmark = pytest.mark.django_db
 
 def test_set_email_changes_login(active_user, auth, post):
     """Смена email меняет и логин для последующего входа."""
-    from django.contrib.auth import get_user_model
 
     User = get_user_model()
     active_user()

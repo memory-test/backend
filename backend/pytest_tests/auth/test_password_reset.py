@@ -1,8 +1,9 @@
 """Тесты сброса пароля по коду."""
 
 import pytest
+from django.core import mail
 
-from .conftest import RESET, RESET_CONFIRM, TOKEN
+from .conftest import REFRESH, RESET, RESET_CONFIRM, TOKEN
 
 pytestmark = pytest.mark.django_db
 
@@ -30,7 +31,6 @@ def test_password_reset_flow(active_user, post, last_code):
 def test_password_reset_unknown_email_is_generic(post):
     """Сброс пароля для несуществующего email не выдаёт его
     отсутствие (анти-enumeration)."""
-    from django.core import mail
 
     resp = post(RESET, {'email': 'noone@example.com'})
 
@@ -83,8 +83,6 @@ def test_password_reset_blacklists_old_tokens(active_user, post, last_code):
         },
     )
     assert resp.status_code == 204
-
-    from .conftest import REFRESH
 
     refreshed = post(REFRESH, {'refresh': tok.data['refresh']})
     assert refreshed.status_code == 401

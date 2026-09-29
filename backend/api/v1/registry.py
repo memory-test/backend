@@ -27,4 +27,8 @@ EXERCISE_REGISTRY = {
         service=services.MatchingExerciseService(),
         write_serializer=serializers.MatchingCheckSerializer,
     ),
+    ExerciseType.GROUPING: ExerciseConfig(
+        service=services.GroupingExerciseService(),
+        write_serializer=serializers.GroupingCheckSerializer,
+    ),
 }
