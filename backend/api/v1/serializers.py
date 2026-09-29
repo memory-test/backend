@@ -355,6 +355,7 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
                     {'id': 103, 'text': 'Ключ', 'image': None},
                     {'id': 104, 'text': 'Молоток', 'image': None},
                 ],
+                'answer_mode': 'multiple_answers',
             },
         ),
     ],
@@ -365,11 +366,20 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
     answers_info = serializers.SerializerMethodField(
         read_only=True,
         help_text=(
-            'Для choice/ordering/grouping/drawing — список вариантов '
-            'ответа. Для matching — {"left": [...], "right": [...]}, '
-            'каждая карточка: {"id", "text", "image"} (карточки '
-            'раздельно, правая колонка перемешана). Для input — всегда '
+            'Для choice/ordering/drawing — список вариантов ответа. '
+            'Для grouping — {"items": [...], "groups": [...]}, каждый '
+            'элемент {"id", "text", "image"} (группа скрыта). Для '
+            'matching — {"left": [...], "right": [...]}, каждая '
+            'карточка {"id", "text", "image"}. Для input — всегда '
             'пустой список (эталон скрыт).'
+        ),
+    )
+    answer_mode = serializers.SerializerMethodField(
+        read_only=True,
+        help_text=(
+            'Подсказка фронту про формат ответа. Для input: '
+            'single_answer/list_answer/free_answer. Для choice: '
+            'single_answer/multiple_answers. Для остальных типов — null.'
         ),
     )
 
@@ -389,12 +399,22 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         relation_name = obj.ANSWER_RELATIONS.get(obj.type)
         answers = getattr(obj, relation_name).all()
 
-        many = obj.type != ExerciseType.MATCHING
+        many = obj.type not in (ExerciseType.MATCHING, ExerciseType.GROUPING)
         return serializer_class(
             answers,
             many=many,
             context=self.context,
         ).data
+
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_answer_mode(self, obj: Exercise):
+        if obj.type == ExerciseType.INPUT:
+            answer = obj.inputanswers.first()
+            return answer.check_method if answer else None
+        if obj.type == ExerciseType.CHOICE:
+            answer = obj.choiceanswers.first()
+            return answer.answer_mode if answer else None
+        return None
 
     class Meta(ExerciseShortSerializer.Meta):
         fields = (
@@ -409,6 +429,7 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
             'is_active',
             'created_at',
             'answers_info',
+            'answer_mode',
         )
 
 

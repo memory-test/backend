@@ -7,8 +7,9 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.utils import timezone
 
-from .conftest import RESEND_ACTIVATION
 from authentication.models import EmailCode
+
+from .conftest import RESEND_ACTIVATION
 
 User = get_user_model()
 
@@ -58,9 +59,7 @@ def test_resend_activation_sends_new_code(register, post):
     """Повторная отправка кода активации работает после кулдауна."""
     register()
     mail.outbox = []
-    EmailCode.objects.update(
-        created_at=timezone.now() - timedelta(minutes=2)
-    )
+    EmailCode.objects.update(created_at=timezone.now() - timedelta(minutes=2))
 
     resp = post(RESEND_ACTIVATION, {'email': 'alice@example.com'})
 

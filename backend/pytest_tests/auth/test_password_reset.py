@@ -67,7 +67,10 @@ def test_password_reset_confirm_weak_password_keeps_code(
 def test_password_reset_blacklists_old_tokens(active_user, post, last_code):
     """Сброс пароля отзывает все ранее выданные токены пользователя."""
     active_user(email='dave@example.com')
-    tok = post(TOKEN, {'email': 'dave@example.com', 'password': 'Str0ng-Passw0rd-2026'})
+    tok = post(
+        TOKEN,
+        {'email': 'dave@example.com', 'password': 'Str0ng-Passw0rd-2026'},
+    )
     post(RESET, {'email': 'dave@example.com'})
     code = last_code()
 

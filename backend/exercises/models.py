@@ -204,6 +204,20 @@ class InputAnswer(Answer):
 class ChoiceAnswer(AnswerTextImageFields):
     """Ответы с выбором варианта(ов)."""
 
+    class AnswerMode(models.TextChoices):
+        SINGLE_ANSWER = 'single_answer', 'Один вариант'
+        MULTIPLE_ANSWERS = 'multiple_answers', 'Несколько вариантов'
+
+    answer_mode = models.CharField(
+        'Режим ответа',
+        max_length=max(len(el) for el, _ in AnswerMode.choices),
+        choices=AnswerMode.choices,
+        default=AnswerMode.SINGLE_ANSWER,
+        help_text=(
+            'Общий для всех вариантов этого задания: ожидается один '
+            'выбранный ответ или несколько.'
+        ),
+    )
     is_correct = models.BooleanField(
         'Верный',
         help_text=(
