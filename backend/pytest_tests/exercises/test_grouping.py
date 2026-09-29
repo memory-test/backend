@@ -1,6 +1,7 @@
 """Тесты grouping: распределение элементов по категориям."""
 
 import pytest
+from conftest import ALL_RIGHT_ANSWER, HALF_CORRECT_ANSWER
 
 from exercises.models import GroupingAnswer
 
@@ -24,7 +25,7 @@ def test_all_assignments_correct_succeeds(
     )
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 100
+    assert resp.data['score'] == ALL_RIGHT_ANSWER
     assert resp.data['success'] is True
 
 
@@ -45,7 +46,7 @@ def test_partial_assignments_correct_scores_proportionally(
     )
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 50.0
+    assert resp.data['score'] == HALF_CORRECT_ANSWER
     assert resp.data['success'] is False
 
 

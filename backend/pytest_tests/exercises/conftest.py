@@ -19,6 +19,9 @@ User = get_user_model()
 
 API = '/api/v1'
 
+ALL_RIGHT_ANSWER = 1
+HALF_CORRECT_ANSWER = 0.5
+
 
 @pytest.fixture
 def user(db):

@@ -1,6 +1,7 @@
 """Тесты choice с выбором нескольких правильных вариантов."""
 
 import pytest
+from conftest import ALL_RIGHT_ANSWER
 
 pytestmark = pytest.mark.django_db
 
@@ -16,7 +17,7 @@ def test_all_correct_options_selected_succeeds(
     )
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 100
+    assert resp.data['score'] == ALL_RIGHT_ANSWER
     assert resp.data['success'] is True
 
 

@@ -1,6 +1,7 @@
 """Тесты matching: сопоставление пар."""
 
 import pytest
+from conftest import ALL_RIGHT_ANSWER, HALF_CORRECT_ANSWER
 
 from exercises.models import MatchingAnswer
 
@@ -20,7 +21,7 @@ def test_all_pairs_correct_succeeds(two_pairs_exercise, pass_exercise):
     )
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 100
+    assert resp.data['score'] == ALL_RIGHT_ANSWER
     assert resp.data['success'] is True
 
 
@@ -39,7 +40,7 @@ def test_partial_pairs_correct_scores_proportionally(
     )
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 50.0
+    assert resp.data['score'] == HALF_CORRECT_ANSWER
     assert resp.data['success'] is False
 
 
