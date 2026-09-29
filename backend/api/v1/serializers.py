@@ -418,6 +418,7 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
                     {'id': 103, 'text': 'Ключ', 'image': None},
                     {'id': 104, 'text': 'Молоток', 'image': None},
                 ],
+                'answer_mode': 'multiple_answers',
             },
         ),
     ],
@@ -434,6 +435,14 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
             'matching — {"left": [...], "right": [...]}, каждая '
             'карточка {"id", "text", "image"}. Для input — всегда '
             'пустой список (эталон скрыт).'
+        ),
+    )
+    answer_mode = serializers.SerializerMethodField(
+        read_only=True,
+        help_text=(
+            'Подсказка фронту про формат ответа. Для input: '
+            'single_answer/list_answer/free_answer. Для choice: '
+            'single_answer/multiple_answers. Для остальных типов — null.'
         ),
     )
 
@@ -460,6 +469,16 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
             context=self.context,
         ).data
 
+    @extend_schema_field({'type': 'string', 'nullable': True})
+    def get_answer_mode(self, obj: Exercise):
+        if obj.type == ExerciseType.INPUT:
+            answer = obj.inputanswers.first()
+            return answer.check_method if answer else None
+        if obj.type == ExerciseType.CHOICE:
+            answer = obj.choiceanswers.first()
+            return answer.answer_mode if answer else None
+        return None
+
     class Meta(ExerciseShortSerializer.Meta):
         fields = (
             'id',
@@ -473,6 +492,7 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
             'is_active',
             'created_at',
             'answers_info',
+            'answer_mode',
         )
 
 
