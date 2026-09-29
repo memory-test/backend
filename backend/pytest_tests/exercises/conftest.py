@@ -7,7 +7,13 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from exercises.models import ChoiceAnswer, Exercise, InputAnswer, MatchingAnswer
+from exercises.models import (
+    ChoiceAnswer,
+    Exercise,
+    GroupingAnswer,
+    InputAnswer,
+    MatchingAnswer,
+)
 
 User = get_user_model()
 
@@ -116,3 +122,22 @@ def two_pairs_exercise(make_exercise):
         exercise=exercise, first_text='Большой', second_text='Маленький'
     )
     return exercise, pair_one, pair_two
+
+
+@pytest.fixture
+def fruits_vegetables_exercise(make_exercise):
+    """Задание grouping: четыре элемента, две категории."""
+    exercise = make_exercise('grouping', 'Фрукты и овощи')
+    apple = GroupingAnswer.objects.create(
+        exercise=exercise, text='Яблоко', group='Фрукты'
+    )
+    pear = GroupingAnswer.objects.create(
+        exercise=exercise, text='Груша', group='Фрукты'
+    )
+    carrot = GroupingAnswer.objects.create(
+        exercise=exercise, text='Морковь', group='Овощи'
+    )
+    potato = GroupingAnswer.objects.create(
+        exercise=exercise, text='Картофель', group='Овощи'
+    )
+    return exercise, apple, pear, carrot, potato
