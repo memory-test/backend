@@ -81,7 +81,7 @@ class OrderingExerciseService(AbstractExerciseService):
         submitted_order = user_answer_data['answers_ids']
 
         success = submitted_order == correct_order
-        score = 100 if success else 0
+        score = 1 if success else 0
 
         return EvaluationResult(
             success=success,
