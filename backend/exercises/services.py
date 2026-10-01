@@ -8,6 +8,8 @@ from django.shortcuts import get_object_or_404
 
 from exercises.models import Exercise, InputAnswer
 
+from .constants import FREE_SUCCESS_THRESHOLD
+
 
 @dataclass(frozen=True, slots=True)
 class EvaluationResult:
@@ -57,7 +59,7 @@ class ChooseExerciseService(AbstractExerciseService):
         success = sorted(user_choices) == sorted(correct_options)
         # TODO: Релизовать алгоритм вычисления баллов за выполнения задания,
         #  для этого нужна будет формула.
-        score = 100 if success else 0
+        score = 1 if success else 0
         return EvaluationResult(success=success, score=score)
 
 
@@ -89,8 +91,6 @@ class OrderingExerciseService(AbstractExerciseService):
 
 class InputExerciseService(AbstractExerciseService):
     """Тип input: один ответ, список слов или свободная форма."""
-
-    FREE_SUCCESS_THRESHOLD = 60
 
     _STOP_WORDS = frozenset(
         {
@@ -143,7 +143,7 @@ class InputExerciseService(AbstractExerciseService):
         """Сравнивает единственный ответ с эталоном."""
         expected = self._normalize(answers[0].expected_text)
         success = self._normalize(user_items[0]) == expected
-        return EvaluationResult(success=success, score=100 if success else 0)
+        return EvaluationResult(success=success, score=1 if success else 0)
 
     def _check_list(self, answers, user_items) -> EvaluationResult:
         """Считает долю угаданных слов от общего числа эталонных."""
@@ -160,7 +160,7 @@ class InputExerciseService(AbstractExerciseService):
         user_set = {self._normalize(word) for word in user_words}
 
         matched = len(expected & user_set)
-        score = round(matched / len(expected) * 100, 2)
+        score = round(matched / len(expected), 2)
         return EvaluationResult(success=matched == len(expected), score=score)
 
     def _check_free(self, answers, user_items) -> EvaluationResult:
@@ -181,9 +181,9 @@ class InputExerciseService(AbstractExerciseService):
         ratio = difflib.SequenceMatcher(
             None, expected_words, user_words
         ).ratio()
-        score = round(ratio * 100, 2)
+        score = round(ratio, 2)
         return EvaluationResult(
-            success=score >= self.FREE_SUCCESS_THRESHOLD, score=score
+            success=score >= FREE_SUCCESS_THRESHOLD, score=score
         )
 
     @classmethod
@@ -231,5 +231,34 @@ class MatchingExerciseService(AbstractExerciseService):
             for el in submitted_pairs
             if el['first_id'] == el['second_id']
         }
-        score = round(len(correct_ids) / total * 100, 2)
+        score = round(len(correct_ids) / total, 2)
         return EvaluationResult(success=len(correct_ids) == total, score=score)
+
+
+class GroupingExerciseService(AbstractExerciseService):
+    """Тип grouping: распределение элементов по категориям."""
+
+    def get_exercise(self, exercise_id: int) -> Exercise:
+        return get_object_or_404(
+            Exercise.objects.prefetch_related('groupinganswers'),
+            id=exercise_id,
+        )
+
+    def check_answer(
+        self, exercise: Exercise, user_answer_data: dict
+    ) -> EvaluationResult:
+        answers = list(exercise.groupinganswers.all())
+        if not answers:
+            return EvaluationResult(success=False, score=0)
+
+        correct_groups = {el.id: el.group for el in answers}
+        assignments = user_answer_data.get('assignments', [])
+
+        matched_ids = {
+            el['item_id']
+            for el in assignments
+            if correct_groups.get(el.get('item_id')) == el.get('group')
+        }
+        total = len(correct_groups)
+        score = round(len(matched_ids) / total, 2)
+        return EvaluationResult(success=len(matched_ids) == total, score=score)

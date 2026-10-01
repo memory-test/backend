@@ -29,6 +29,7 @@ from api.v1.serializers import (
     CodeVerifySerializer,
     ExerciseFullSerializer,
     ExerciseShortSerializer,
+    GroupingCheckSerializer,
     HistoryDetailSerializer,
     HistoryListSerializer,
     InputCheckSerializer,
@@ -115,8 +116,9 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
             'Принимает ответ пользователя, проверяет его и сохраняет '
             'результат. Тело запроса зависит от типа задания: choice — '
             'ChoiceCheckSerializer (answers_ids), input — '
-            'InputCheckSerializer (answers). Возвращает оценку и признак '
-            'успешности.'
+            'InputCheckSerializer (answers), grouping — '
+            'GroupingCheckSerializer (assignments). Возвращает оценку и '
+            'признак успешности.'
         ),
         request=PolymorphicProxySerializer(
             component_name='PassRequest',
@@ -124,6 +126,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 ChoiceCheckSerializer,
                 InputCheckSerializer,
                 MatchingCheckSerializer,
+                GroupingCheckSerializer,
             ],
             resource_type_field_name=None,
         ),
@@ -179,6 +182,19 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                     'pairs': [
                         {'first_id': 1, 'second_id': 1},
                         {'first_id': 2, 'second_id': 2},
+                    ],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                'Пример запроса (grouping)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:30:30Z',
+                    'duration_seconds': 30,
+                    'assignments': [
+                        {'item_id': 1, 'group': 'Фрукты'},
+                        {'item_id': 2, 'group': 'Овощи'},
                     ],
                 },
                 request_only=True,

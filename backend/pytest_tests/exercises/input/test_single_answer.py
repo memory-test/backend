@@ -1,6 +1,7 @@
 """Тесты input с check_method=single_answer."""
 
 import pytest
+from conftest import ALL_RIGHT_ANSWER
 
 from exercises.models import InputAnswer
 
@@ -19,7 +20,7 @@ def test_answer_is_normalized(make_exercise, pass_exercise):
     resp = pass_exercise(exercise.id, answers=['  париж!  '])
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 100
+    assert resp.data['score'] == ALL_RIGHT_ANSWER
     assert resp.data['success'] is True
 
 

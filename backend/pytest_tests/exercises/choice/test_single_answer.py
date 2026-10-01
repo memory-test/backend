@@ -1,6 +1,7 @@
 """Тесты choice с выбором одного правильного варианта."""
 
 import pytest
+from conftest import ALL_RIGHT_ANSWER
 
 from exercises.models import ChoiceAnswer
 
@@ -20,7 +21,7 @@ def test_correct_answer_succeeds(make_exercise, pass_exercise):
     resp = pass_exercise(exercise.id, answers_ids=[correct.id])
 
     assert resp.status_code == 200
-    assert resp.data['score'] == 100
+    assert resp.data['score'] == ALL_RIGHT_ANSWER
     assert resp.data['success'] is True
 
 
