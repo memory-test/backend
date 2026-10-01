@@ -35,6 +35,7 @@ from api.v1.serializers import (
     InputCheckSerializer,
     LoginCodeRequestSerializer,
     MatchingCheckSerializer,
+    OrderingCheckSerializer,
     ResultExerciseSerializer,
 )
 from authentication import services
@@ -116,9 +117,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
             'Принимает ответ пользователя, проверяет его и сохраняет '
             'результат. Тело запроса зависит от типа задания: choice — '
             'ChoiceCheckSerializer (answers_ids), input — '
-            'InputCheckSerializer (answers), grouping — '
-            'GroupingCheckSerializer (assignments). Возвращает оценку и '
-            'признак успешности.'
+            'InputCheckSerializer (answers), matching — '
+            'MatchingCheckSerializer (pairs), grouping — '
+            'GroupingCheckSerializer (assignments), ordering — '
+            'OrderingCheckSerializer (answers_ids, порядок важен). '
+            'Возвращает оценку и признак успешности.'
         ),
         request=PolymorphicProxySerializer(
             component_name='PassRequest',
@@ -126,6 +129,7 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 ChoiceCheckSerializer,
                 InputCheckSerializer,
                 MatchingCheckSerializer,
+                OrderingCheckSerializer,
                 GroupingCheckSerializer,
             ],
             resource_type_field_name=None,
@@ -200,6 +204,16 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                 request_only=True,
             ),
             OpenApiExample(
+                'Пример запроса (ordering)',
+                value={
+                    'started_at': '2026-09-07T14:30:00Z',
+                    'finished_at': '2026-09-07T14:30:30Z',
+                    'duration_seconds': 30,
+                    'answers_ids': [103, 101, 104, 102],
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
                 'Результат прохождения',
                 value={'score': 0.67, 'success': False},
                 response_only=True,
@@ -213,7 +227,8 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
                     'description': (
                         'Ошибка валидации: либо {"detail": "..."} — общая '
                         'ошибка, либо {"<поле>": ["..."]} — ошибка '
-                        'конкретного поля (answers_ids, answers).'
+                        'конкретного поля (answers_ids, answers, pairs, '
+                        'assignments).'
                     ),
                     'properties': {'detail': {'type': 'string'}},
                     'additionalProperties': {

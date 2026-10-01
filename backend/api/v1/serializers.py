@@ -199,9 +199,15 @@ class ChoiceCheckSerializer(BaseCheckSerializer):
 
 
 class OrderingCheckSerializer(BaseCheckSerializer):
+    """Сериалайзер для проверки ответов типа ordering."""
+
     answers_ids = serializers.ListField(
         child=serializers.IntegerField(),
         allow_empty=False,
+        help_text=(
+            'Id элементов из answers_info в том порядке, в котором '
+            'пользователь их расставил.'
+        ),
     )
 
     def validate(self, attrs):
@@ -278,22 +284,6 @@ class MatchingAnswerSerializer(serializers.Serializer):
         return MatchingCardSerializer(cards, many=True).data
 
 
-@extend_schema_serializer(
-    examples=[
-        OpenApiExample(
-            'Пример запроса (matching)',
-            value={
-                'started_at': '2026-09-07T14:30:00Z',
-                'finished_at': '2026-09-07T14:30:30Z',
-                'duration_seconds': 30,
-                'pairs': [
-                    {'first_id': 1, 'second_id': 1},
-                    {'first_id': 2, 'second_id': 2},
-                ],
-            },
-        ),
-    ],
-)
 class MatchingCheckSerializer(BaseCheckSerializer):
     """Сериалайзер для проверки ответов типа matching."""
 
@@ -506,13 +496,8 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         if serializer_class is None:
             return []
         relation_name = obj.ANSWER_RELATIONS.get(obj.type)
-        if relation_name is None:
-            return []
-        answers = getattr(obj, relation_name).all()
-
-        if obj.type == ExerciseType.ORDERING and not self.context.get(
-            'show_correct', False
-        ):
+        answers = list(getattr(obj, relation_name).all())
+        if obj.type == ExerciseType.CHOICE:
             random.shuffle(answers)
 
         many = obj.type not in (ExerciseType.MATCHING, ExerciseType.GROUPING)
