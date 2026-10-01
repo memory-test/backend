@@ -8,9 +8,13 @@ from api.v1.views import (
     HistoryListView,
     LoginCodeRequestView,
 )
+from authentication.views import CodeUserViewSet
 
 router = DefaultRouter()
 router.register('exercises', ExerciseViewSet)
+
+user_router = DefaultRouter()
+user_router.register('users', CodeUserViewSet, basename='user')
 
 urlpatterns = [
     path('', include(router.urls)),
@@ -24,7 +28,7 @@ urlpatterns = [
         HistoryDetailView.as_view(),
         name='history-detail',
     ),
-    path('auth/', include('djoser.urls')),
+    path('auth/', include(user_router.urls)),
     path('auth/', include('djoser.urls.jwt')),
     path('auth/code/request/', LoginCodeRequestView.as_view()),
     path('auth/verify/', CodeVerifyView.as_view()),
