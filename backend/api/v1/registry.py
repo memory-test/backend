@@ -14,10 +14,14 @@ class ExerciseConfig:
     write_serializer: Type[Serializer]
 
 
-EXERCISE_REGISTRY = {
+EXERCISE_REGISTRY: dict[str, ExerciseConfig] = {
     ExerciseType.CHOICE: ExerciseConfig(
         service=services.ChooseExerciseService(),
         write_serializer=serializers.ChoiceCheckSerializer,
+    ),
+    ExerciseType.ORDERING: ExerciseConfig(
+        service=services.OrderingExerciseService(),
+        write_serializer=serializers.OrderingCheckSerializer,
     ),
     ExerciseType.INPUT: ExerciseConfig(
         service=services.InputExerciseService(),

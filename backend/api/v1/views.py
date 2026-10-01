@@ -96,9 +96,11 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
 
     def _get_config(self, exercise_id: int) -> ExerciseConfig:
         """Вспомогательный метод для получения конфигурации по id задания."""
-        exercise_type = get_object_or_404(
-            Exercise.objects.values('type'), id=exercise_id
-        )['type']
+        exercise = get_object_or_404(
+            Exercise.objects.only('type'),
+            id=exercise_id,
+        )
+        exercise_type = exercise.type
 
         config = EXERCISE_REGISTRY.get(exercise_type)
         if not config:
@@ -237,7 +239,8 @@ class ExerciseViewSet(ReadOnlyModelViewSet):
         config = self._get_config(pk)
         exercise = config.service.get_exercise(pk)
         serializer = config.write_serializer(
-            data=request.data, context={'exercise': exercise}
+            data=request.data,
+            context={'exercise': exercise},
         )
         serializer.is_valid(raise_exception=True)
         clean_data = serializer.validated_data

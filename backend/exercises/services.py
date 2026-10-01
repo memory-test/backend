@@ -63,6 +63,32 @@ class ChooseExerciseService(AbstractExerciseService):
         return EvaluationResult(success=success, score=score)
 
 
+class OrderingExerciseService(AbstractExerciseService):
+    """Получение и проверка задания на упорядочивание."""
+
+    def get_exercise(self, exercise_id: int) -> Exercise:
+        queryset = Exercise.objects.prefetch_related('orderinganswers')
+        return get_object_or_404(queryset, id=exercise_id)
+
+    def check_answer(
+        self,
+        exercise: Exercise,
+        user_answer_data: dict,
+    ) -> EvaluationResult:
+        correct_order = [
+            answer.id for answer in exercise.orderinganswers.all()
+        ]
+        submitted_order = user_answer_data['answers_ids']
+
+        success = submitted_order == correct_order
+        score = 100 if success else 0
+
+        return EvaluationResult(
+            success=success,
+            score=score,
+        )
+
+
 class InputExerciseService(AbstractExerciseService):
     """Тип input: один ответ, список слов или свободная форма."""
 

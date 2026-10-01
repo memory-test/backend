@@ -1,9 +1,10 @@
 import random
 from dataclasses import dataclass
+from typing import Any
 
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import (
     OpenApiExample,
-    OpenApiTypes,
     extend_schema_field,
     extend_schema_serializer,
 )
@@ -35,7 +36,7 @@ class AnswerBaseSerializer(serializers.ModelSerializer):
     """
 
     class Meta:
-        fields = (
+        fields: tuple[str, ...] = (
             'text',
             'image',
         )
@@ -72,6 +73,14 @@ class OrderingAnswerSerializer(AnswerBaseSerializer):
     class Meta(AnswerBaseSerializer.Meta):
         model = OrderingAnswer
         fields = AnswerBaseSerializer.Meta.fields + ('id', 'position')
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+
+        if not self.context.get('show_correct', False):
+            data.pop('position', None)
+
+        return data
 
 
 @dataclass
@@ -186,6 +195,40 @@ class ChoiceCheckSerializer(BaseCheckSerializer):
                 }
             )
         attrs['answers_ids'] = list(user_answers_ids)
+        return attrs
+
+
+class OrderingCheckSerializer(BaseCheckSerializer):
+    answers_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        exercise = self.context['exercise']
+
+        submitted_ids = attrs['answers_ids']
+        allowed_ids = {answer.id for answer in exercise.orderinganswers.all()}
+
+        if len(submitted_ids) != len(set(submitted_ids)):
+            raise serializers.ValidationError(
+                {
+                    'answers_ids': (
+                        'Каждый элемент должен встречаться ровно один раз.'
+                    )
+                }
+            )
+
+        if set(submitted_ids) != allowed_ids:
+            raise serializers.ValidationError(
+                {
+                    'answers_ids': (
+                        'Необходимо передать все элементы данного задания.'
+                    )
+                }
+            )
+
         return attrs
 
 
@@ -383,7 +426,7 @@ class ExerciseShortSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Exercise
-        fields = (
+        fields: tuple[str, ...] = (
             'id',
             'title',
             'description',
@@ -446,7 +489,10 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         ),
     )
 
-    ANSWER_SERIALIZERS = {
+    ANSWER_SERIALIZERS: dict[
+        str,
+        type[serializers.ModelSerializer[Any]],
+    ] = {
         ExerciseType.CHOICE: ChoiceAnswerSerializer,
         ExerciseType.ORDERING: OrderingAnswerSerializer,
         ExerciseType.GROUPING: GroupingAnswerSerializer,
@@ -460,7 +506,14 @@ class ExerciseFullSerializer(ExerciseShortSerializer):
         if serializer_class is None:
             return []
         relation_name = obj.ANSWER_RELATIONS.get(obj.type)
+        if relation_name is None:
+            return []
         answers = getattr(obj, relation_name).all()
+
+        if obj.type == ExerciseType.ORDERING and not self.context.get(
+            'show_correct', False
+        ):
+            random.shuffle(answers)
 
         many = obj.type not in (ExerciseType.MATCHING, ExerciseType.GROUPING)
         return serializer_class(
