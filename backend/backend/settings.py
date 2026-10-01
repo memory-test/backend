@@ -186,6 +186,8 @@ DJOSER = {
         'activation': 'authentication.djoser.CodeActivationEmail',
         'password_reset': 'authentication.djoser.CodePasswordResetEmail',
     },
+    "TOKEN_MODEL": None,
+
 }
 
 EMAIL_BACKEND = os.getenv(
