@@ -11,9 +11,10 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from djoser.email import ActivationEmail, PasswordResetEmail
 from djoser.serializers import UserCreateMixin
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from exercises.models import Exercise
 from users.constants import EMAIL_LENGTH
 from users.models import User
 
@@ -34,6 +35,7 @@ class CodeUserSerializer(serializers.ModelSerializer):
     age = serializers.SerializerMethodField()
     progress_percent = serializers.SerializerMethodField()
 
+    @extend_schema_field({'type': 'integer', 'nullable': True})
     def get_age(self, obj):
         if obj.birth_date is None:
             return None
@@ -44,20 +46,14 @@ class CodeUserSerializer(serializers.ModelSerializer):
         )
         return today.year - obj.birth_date.year - (not birthday_has_passed)
 
+    @extend_schema_field(OpenApiTypes.FLOAT)
     def get_progress_percent(self, obj):
-        total_count = Exercise.objects.filter(is_active=True).count()
+        sessions = obj.exercise_sessions.filter(finished_at__isnull=False)
+        total_count = sessions.count()
         if total_count == 0:
             return 0
-        completed_count = (
-            obj.exercise_sessions.filter(
-                exercise__is_active=True,
-                finished_at__isnull=False,
-            )
-            .values('exercise_id')
-            .distinct()
-            .count()
-        )
-        return round(completed_count / total_count * 100, 2)
+        success_count = sessions.filter(success=True).count()
+        return round(success_count / total_count * 100, 2)
 
     class Meta:
         model = User
@@ -72,6 +68,7 @@ class CodeUserSerializer(serializers.ModelSerializer):
             'role',
             'is_active',
             'date_joined',
+            'avatar',
         )
         read_only_fields = (
             'id',
@@ -214,3 +211,30 @@ class CodePasswordResetEmail(_CodeEmailMixin, PasswordResetEmail):
     """Письмо с кодом сброса пароля."""
 
     purpose = EmailCode.Purpose.PASSWORD_RESET
+
+
+class AvatarUploadSerializer(serializers.ModelSerializer):
+    """Загрузка аватара через отдельный эндпоинт."""
+
+    class Meta:
+        model = User
+        fields = ('avatar',)
+
+
+class SetEmailRequestSerializer(serializers.Serializer):
+    """Тело запроса для смены email."""
+
+    new_username = serializers.EmailField(
+        help_text='Новый email. Djoser использует поле new_username, '
+        'потому что USERNAME_FIELD = email.',
+    )
+    current_password = serializers.CharField(
+        style={'input_type': 'password'},
+        help_text='Текущий пароль пользователя',
+    )
+
+
+class SetEmailResponseSerializer(serializers.Serializer):
+    """Ответ при успешной смене email."""
+
+    detail = serializers.CharField(help_text='Сообщение о результате')

@@ -76,6 +76,13 @@ class User(AbstractUser):
         default=Role.USER,
         verbose_name='Роль',
     )
+    avatar = models.ImageField(
+        upload_to='avatars/',
+        blank=True,
+        null=True,
+        help_text='Изображение профиля пользователя.',
+        verbose_name='Аватар',
+    )
 
     class Meta:
         verbose_name = 'пользователь'

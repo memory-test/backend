@@ -79,7 +79,7 @@ def test_me_age_before_and_after_birthday(
 def test_me_progress_is_zero_without_active_exercises(
     active_user, auth, api_client
 ):
-    """Прогресс равен нулю, если нет пройденных активных заданий."""
+    """Прогресс равен нулю, если нет завершённых попыток."""
     active_user()
     auth('carol@example.com', 'Str0ng-Passw0rd-2026')
 
@@ -88,15 +88,16 @@ def test_me_progress_is_zero_without_active_exercises(
     assert resp.data['progress_percent'] == 0
 
 
-def test_me_progress_for_completed_active_exercises(
+def test_me_progress_for_mixed_sessions(
     active_user, auth, api_client, make_offline_exercise, make_session
 ):
-    """Прогресс — доля пройденных активных заданий от их общего числа."""
+    """Прогресс — доля успешных попыток от общего числа попыток."""
     user = active_user()
-    exercises = [
-        make_offline_exercise(f'Задание {index}') for index in range(4)
-    ]
-    make_session(user, exercises[0])
+    exercise = make_offline_exercise('Задание')
+    make_session(user, exercise, success=True)
+    make_session(user, exercise, success=False)
+    make_session(user, exercise, success=False)
+    make_session(user, exercise, success=False)
     auth('carol@example.com', 'Str0ng-Passw0rd-2026')
 
     resp = api_client.get(f'/api/v1{ME}')
@@ -109,10 +110,10 @@ def test_me_progress_rounds_to_two_decimal_places(
 ):
     """Прогресс округляется до двух знаков после запятой."""
     user = active_user()
-    exercises = [
-        make_offline_exercise(f'Задание {index}') for index in range(3)
-    ]
-    make_session(user, exercises[0])
+    exercise = make_offline_exercise('Задание')
+    make_session(user, exercise, success=True)
+    make_session(user, exercise, success=False)
+    make_session(user, exercise, success=False)
     auth('carol@example.com', 'Str0ng-Passw0rd-2026')
 
     resp = api_client.get(f'/api/v1{ME}')
@@ -120,15 +121,15 @@ def test_me_progress_rounds_to_two_decimal_places(
     assert resp.data['progress_percent'] == 33.33
 
 
-def test_me_progress_counts_repeated_exercise_once(
+def test_me_progress_counts_each_attempt_separately(
     active_user, auth, api_client, make_offline_exercise, make_session
 ):
-    """Повторное прохождение одного задания засчитывается один раз."""
+    """Повторные попытки одного задания считаются по отдельности,
+    а не как одно уникальное прохождение."""
     user = active_user()
-    completed_exercise = make_offline_exercise('Пройденное задание')
-    make_offline_exercise('Непройденное задание')
-    make_session(user, completed_exercise)
-    make_session(user, completed_exercise)
+    exercise = make_offline_exercise('Задание')
+    make_session(user, exercise, success=True)
+    make_session(user, exercise, success=False)
     auth('carol@example.com', 'Str0ng-Passw0rd-2026')
 
     resp = api_client.get(f'/api/v1{ME}')
@@ -139,8 +140,7 @@ def test_me_progress_counts_repeated_exercise_once(
 def test_me_progress_counts_unsuccessful_session(
     active_user, auth, api_client, make_offline_exercise, make_session
 ):
-    """Неуспешная попытка всё равно засчитывается как прохождение
-    для прогресса."""
+    """Неуспешная попытка не засчитывается в процент успешных."""
     user = active_user()
     exercise = make_offline_exercise('Неуспешно пройденное задание')
     make_session(user, exercise, success=False)
@@ -148,24 +148,24 @@ def test_me_progress_counts_unsuccessful_session(
 
     resp = api_client.get(f'/api/v1{ME}')
 
-    assert resp.data['progress_percent'] == 100
+    assert resp.data['progress_percent'] == 0
 
 
-def test_me_progress_ignores_inactive_exercises(
+def test_me_progress_includes_inactive_exercise_sessions(
     active_user, auth, api_client, make_offline_exercise, make_session
 ):
-    """Неактивные задания не учитываются в прогрессе."""
+    """Попытки по уже неактивным заданиям всё равно учитываются в
+    проценте (считаются попытки, а не активные задания)."""
     user = active_user()
-    make_offline_exercise('Активное задание')
     inactive_exercise = make_offline_exercise(
         'Неактивное задание', is_active=False
     )
-    make_session(user, inactive_exercise)
+    make_session(user, inactive_exercise, success=True)
     auth('carol@example.com', 'Str0ng-Passw0rd-2026')
 
     resp = api_client.get(f'/api/v1{ME}')
 
-    assert resp.data['progress_percent'] == 0
+    assert resp.data['progress_percent'] == 100
 
 
 def test_me_role_is_read_only(active_user, auth, api_client):

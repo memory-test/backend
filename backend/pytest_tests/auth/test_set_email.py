@@ -23,7 +23,7 @@ def test_set_email_changes_login(active_user, auth, post):
         },
     )
 
-    assert resp.status_code == 204
+    assert resp.status_code == 200
     assert User.objects.filter(email='carol-new@example.com').exists()
 
     resp = post(

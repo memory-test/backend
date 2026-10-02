@@ -1,4 +1,3 @@
-
 from djoser.views import UserViewSet
 from drf_spectacular.utils import (
     OpenApiExample,
@@ -6,30 +5,18 @@ from drf_spectacular.utils import (
     extend_schema,
     extend_schema_view,
 )
-from rest_framework import serializers, status
+from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from users.models import User
 
-
-class SetEmailRequestSerializer(serializers.Serializer):
-    """Тело запроса для смены email."""
-
-    new_username = serializers.EmailField(
-        help_text='Новый email. Djoser использует поле new_username, '
-        'потому что USERNAME_FIELD = email.',
-    )
-    current_password = serializers.CharField(
-        style={'input_type': 'password'},
-        help_text='Текущий пароль пользователя',
-    )
-
-
-class SetEmailResponseSerializer(serializers.Serializer):
-    """Ответ при успешной смене email."""
-
-    detail = serializers.CharField(help_text='Сообщение о результате')
+from .djoser import (
+    AvatarUploadSerializer,
+    SetEmailRequestSerializer,
+    SetEmailResponseSerializer,
+)
 
 
 @extend_schema_view(
@@ -73,7 +60,7 @@ class SetEmailResponseSerializer(serializers.Serializer):
                 ],
             ),
             401: OpenApiResponse(description='Не авторизован'),
-        }
+        },
     ),
 )
 class CodeUserViewSet(UserViewSet):
@@ -88,3 +75,66 @@ class CodeUserViewSet(UserViewSet):
                 status=status.HTTP_200_OK,
             )
         return response
+
+    @extend_schema(
+        summary='Загрузка аватара',
+        description=(
+            'Загружает или заменяет аватар текущего пользователя. '
+            'Тело запроса — multipart/form-data с единственным полем '
+            'avatar (файл изображения). Полная замена: новый файл '
+            'заменяет старый, частичная загрузка (только часть '
+            'изображения) не поддерживается.'
+        ),
+        request={
+            'multipart/form-data': AvatarUploadSerializer,
+        },
+        responses={
+            200: AvatarUploadSerializer,
+            400: OpenApiResponse(
+                response={
+                    'type': 'object',
+                    'description': (
+                        'Ошибка валидации файла (не изображение, '
+                        'повреждён и т.п.): {"avatar": ["..."]}.'
+                    ),
+                    'properties': {},
+                    'additionalProperties': {
+                        'type': 'array',
+                        'items': {'type': 'string'},
+                    },
+                },
+                description='Ошибка валидации',
+            ),
+            401: OpenApiResponse(
+                response={
+                    'type': 'object',
+                    'properties': {'detail': {'type': 'string'}},
+                },
+                description='Не авторизован',
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                'Успешная загрузка',
+                value={'avatar': 'http://example.com/media/avatars/photo.jpg'},
+                response_only=True,
+            ),
+        ],
+    )
+    @action(
+        ['patch'],
+        detail=False,
+        url_path='me/avatar',
+        parser_classes=[MultiPartParser, FormParser],
+    )
+    def avatar(self, request, *args, **kwargs):
+        """PATCH /users/me/avatar/ — загрузка/смена аватара."""
+        serializer = AvatarUploadSerializer(
+            request.user,
+            data=request.data,
+            partial=True,
+            context={'request': request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
