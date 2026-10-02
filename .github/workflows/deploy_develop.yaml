@@ -1,0 +1,92 @@
+---
+name: Deploy Develop
+on:  # yamllint disable-line rule:truthy
+  push:
+    branches: [develop, devops/test-deploy-develop]
+  workflow_dispatch:  # Allow manual triggering
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: 2. Create .env file for CI
+        run: |
+          pip3 install dump-env
+          dump-env \
+            -t env.template \
+            -p 'CI_' > .env
+
+      - name: 3. Build and run ci.sh
+        run: |
+          docker compose build \
+            --progress=plain \
+            backend
+          docker compose run \
+            --user=root \
+            --rm \
+            backend python manage.py check --deploy
+
+
+  deploy:
+    needs: test
+    env:
+      CI_DEBUG: False
+      CI_SECRET_KEY: ${{ secrets.DJANGO_SECRET_KEY }}
+      CI_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+      CI_DJANGO_SUPERUSER_USERNAME: ${{ vars.DJANGO_SUPERUSER_USERNAME }}
+      CI_DJANGO_SUPERUSER_EMAIL: ${{ vars.DJANGO_SUPERUSER_EMAIL }}
+      CI_DJANGO_SUPERUSER_PASSWORD: ${{ secrets.DJANGO_SUPERUSER_PASSWORD }}
+      CI_ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+      CI_ACME_DOMAIN_NAME: ${{ vars.ACME_DOMAIN_NAME }}
+      CI_ALLOWED_HOSTS: ${{ vars.ALLOWED_HOSTS }}
+      CI_CORS_ALLOWED_ORIGINS: ${{ vars.CORS_ALLOWED_ORIGINS }}
+      CI_CSRF_TRUSTED_ORIGINS: ${{ vars.CSRF_TRUSTED_ORIGINS }}
+#      CI_EMAIL_BACKEND: ${{ vars.EMAIL_BACKEND }}
+#      CI_EMAIL_HOST: ${{ vars.EMAIL_HOST }}
+#      CI_EMAIL_PORT: ${{ vars.EMAIL_PORT }}
+#      CI_EMAIL_USE_TLS: ${{ vars.EMAIL_USE_TLS }}
+#      CI_EMAIL_USE_SSL: ${{ vars.EMAIL_USE_SSL }}
+#      CI_EMAIL_HOST_USER: ${{ vars.EMAIL_HOST_USER }}
+#      CI_EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
+#      CI_DEFAULT_FROM_EMAIL: ${{ vars.DEFAULT_FROM_EMAIL }}
+
+
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout repository code
+        uses: actions/checkout@v4
+
+      - name: 2. Create .env file for CI
+        run: |
+          pip3 install dump-env
+          dump-env \
+            -t env.template \
+            -p 'CI_' > .env
+
+      - name: Copy deploy files to dev server
+        uses: appleboy/scp-action@v1
+        with:
+          host: ${{ vars.SSH_DEPLOY_HOST }}
+          username: ${{ secrets.SSH_DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          overwrite: true
+          source: ".env,backend,gateway,docker,docker-compose.yml"
+          target: backend
+          rm: true
+
+      - name: ssh deploy commands
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.SSH_DEPLOY_HOST }}
+          username: ${{ secrets.SSH_DEPLOY_USER }}
+          key: ${{ secrets.SSH_DEPLOY_KEY }}
+          script: |
+            mkdir -p ~/frontend/dist
+            cd backend
+            docker/deploy_dev_server.sh

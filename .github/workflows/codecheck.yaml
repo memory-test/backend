@@ -1,0 +1,44 @@
+---
+name: CI (Test Code)
+on:  # yamllint disable-line rule:truthy
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout repository code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 2. Check for modified migrations
+        run: |
+          git fetch origin ${{ github.base_ref }}
+          MODIFIED_FILES=$(git diff --name-only --diff-filter=M \
+          origin/${{ github.base_ref }}...HEAD | grep -E '/migrations/' || true)
+
+          if [ -n "$MODIFIED_FILES" ]; then
+            echo "Error: The following existing migrations were modified:"
+            echo "$MODIFIED_FILES"
+            echo "Don't modify existing migrations. Create new migrations!"
+            exit 1
+          fi
+
+      - name: 4. Create .env file for CI
+        run: |
+          cp env.template .env
+
+      - name: 5. Build and test
+        run: |
+          docker compose build \
+            --progress=plain \
+            backend
+          docker compose run \
+            --user=root \
+            --rm \
+            backend python manage.py check --deploy
